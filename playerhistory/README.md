@@ -1,5 +1,7 @@
 # Player History
 
+![Player History preview](img/image.png)
+
 ## What it does
 
 Every time a player joins your instance they are added to your history. The mod stores the last 10 encounter timestamps per player and keeps at most 50 players total, dropping the oldest when the limit is reached.
