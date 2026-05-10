@@ -7,19 +7,25 @@ using System.Text;
 
 namespace PlayerHistory
 {
+    class Encounter
+    {
+        public DateTime Time;
+        public string World;
+    }
+
     class PlayerEntry
     {
         public string UserId;
         public string DisplayName;
         public DateTime LastSeen;
-        public List<DateTime> Encounters; // newest first, max 10
+        public List<Encounter> Encounters; // newest first, max 10
     }
 
     static class HistoryData
     {
         static readonly string s_filePath = Path.Combine(MelonEnvironment.UserDataDirectory, "PlayerHistory.tsv");
 
-        const int c_maxEntries = 50;
+        const int c_maxEntries = 100;
         const int c_maxEncounters = 10;
 
         internal static readonly List<PlayerEntry> Entries = new List<PlayerEntry>();
@@ -37,13 +43,16 @@ namespace PlayerHistory
                     if (p.Length < 3) continue;
                     if (!long.TryParse(p[2], out long ft)) continue;
 
-                    var encounters = new List<DateTime>();
+                    var encounters = new List<Encounter>();
                     if (p.Length > 3)
                     {
                         foreach (var part in p[3].Split('|'))
                         {
-                            if (long.TryParse(part, out long eft))
-                                encounters.Add(DateTime.FromFileTimeUtc(eft).ToLocalTime());
+                            var colonIdx = part.IndexOf(':');
+                            if (colonIdx > 0 && long.TryParse(part.Substring(0, colonIdx), out long eft))
+                                encounters.Add(new Encounter { Time = DateTime.FromFileTimeUtc(eft).ToLocalTime(), World = part.Substring(colonIdx + 1) });
+                            else if (long.TryParse(part, out long eft2))
+                                encounters.Add(new Encounter { Time = DateTime.FromFileTimeUtc(eft2).ToLocalTime(), World = "" });
                         }
                     }
 
@@ -67,10 +76,11 @@ namespace PlayerHistory
             try
             {
                 using var writer = new StreamWriter(s_filePath, false, Encoding.UTF8);
-                writer.WriteLine("# PlayerHistory v3");
+                writer.WriteLine("# PlayerHistory v4");
                 foreach (var e in Entries)
                 {
-                    var encounterStr = string.Join("|", e.Encounters.ConvertAll(d => d.ToFileTimeUtc().ToString()));
+                    var encounterStr = string.Join("|", e.Encounters.ConvertAll(enc =>
+                        $"{enc.Time.ToFileTimeUtc()}:{enc.World.Replace("|", " ").Replace("\t", " ")}"));
                     writer.WriteLine(string.Join("\t",
                         e.UserId,
                         e.DisplayName.Replace("\t", " "),
@@ -92,15 +102,16 @@ namespace PlayerHistory
             return null;
         }
 
-        internal static void AddOrUpdate(string userId, string displayName)
+        internal static void AddOrUpdate(string userId, string displayName, string worldName)
         {
             var now = DateTime.Now;
+            var enc = new Encounter { Time = now, World = worldName ?? "" };
             var existing = Find(userId);
             if (existing != null)
             {
                 existing.DisplayName = displayName;
                 existing.LastSeen = now;
-                existing.Encounters.Insert(0, now);
+                existing.Encounters.Insert(0, enc);
                 if (existing.Encounters.Count > c_maxEncounters)
                     existing.Encounters.RemoveAt(existing.Encounters.Count - 1);
             }
@@ -120,7 +131,7 @@ namespace PlayerHistory
                     UserId = userId,
                     DisplayName = displayName,
                     LastSeen = now,
-                    Encounters = new List<DateTime> { now }
+                    Encounters = new List<Encounter> { enc }
                 });
             }
         }

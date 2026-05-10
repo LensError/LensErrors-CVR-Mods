@@ -1,4 +1,5 @@
 using ABI_RC.Core.Player;
+using ABI_RC.Core.Savior;
 using ABI_RC.Systems.GameEventSystem;
 using MelonLoader;
 using System;
@@ -16,7 +17,7 @@ namespace PlayerHistory
         {
             try
             {
-                HistoryData.AddOrUpdate(entity.Uuid, entity.Username);
+                HistoryData.AddOrUpdate(entity.Uuid, entity.Username, MetaPort.Instance.CurrentWorldName);
                 HistoryData.Save();
             }
             catch (Exception ex)

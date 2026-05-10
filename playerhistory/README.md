@@ -4,7 +4,7 @@
 
 ## What it does
 
-Every time a player joins your instance they are added to your history. The mod stores the last 10 encounter timestamps per player and keeps at most 50 players total, dropping the oldest when the limit is reached.
+Every time a player joins your instance they are added to your history. The mod stores the last 10 encounter timestamps per player and keeps at most 100 players total, dropping the oldest when the limit is reached.
 
 The history is saved to `UserData/PlayerHistory.tsv` and persists between sessions.
 

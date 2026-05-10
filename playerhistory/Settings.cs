@@ -115,8 +115,13 @@ namespace PlayerHistory
                 ms_detailUserId = entry.UserId;
                 ms_detailPage.MenuTitle = entry.DisplayName;
                 ms_encounterCat.ClearChildren();
-                foreach (var dt in entry.Encounters)
-                    ms_encounterCat.AddTextBlock(dt.ToString("yyyy-MM-dd   HH:mm"));
+                foreach (var enc in entry.Encounters)
+                {
+                    var label = string.IsNullOrEmpty(enc.World)
+                        ? enc.Time.ToString("yyyy-MM-dd   HH:mm")
+                        : $"{enc.World}   {enc.Time:yyyy-MM-dd   HH:mm}";
+                    ms_encounterCat.AddTextBlock(label);
+                }
                 ms_detailPage.OpenPage();
             }
             catch (Exception ex)
