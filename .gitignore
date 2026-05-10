@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+*.DotSettings.user
+Thumbs.db
+.DS_Store
+.claude/
+BTKUILIB.md
+References/
+CLAUDE.md
