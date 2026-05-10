@@ -27,7 +27,7 @@ namespace PlayerHistory
 
         static void BuildUI()
         {
-            var page = new Page("PlayerHistory", "Main", isRootPage: true);
+            var page = new Page("PlayerHistory", "Main", isRootPage: true, tabIcon: "groups");
             page.MenuTitle = "Player History";
             page.MenuSubtitle = "Players you've met";
 

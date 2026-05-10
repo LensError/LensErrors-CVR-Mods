@@ -41,7 +41,7 @@ namespace CVROPENAI
 
         static void BuildUI()
         {
-            var page = new Page(CategoryId, "Main", isRootPage: true);
+            var page = new Page(CategoryId, "Main", isRootPage: true, tabIcon: "voice_chat");
             page.MenuTitle    = "AI Voice TTS";
             page.MenuSubtitle = "Configure TTS provider and voice";
 

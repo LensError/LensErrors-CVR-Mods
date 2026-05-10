@@ -4,12 +4,17 @@
     <Platforms>x64</Platforms>
     <Version>1.0.0</Version>
     <AssemblyName>PlayerHistory</AssemblyName>
+    <RootNamespace>PlayerHistory</RootNamespace>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <DebugType>embedded</DebugType>
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="groups_256dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="MelonLoader">

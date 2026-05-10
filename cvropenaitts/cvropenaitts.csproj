@@ -4,6 +4,7 @@
     <Platforms>x64</Platforms>
     <Version>1.0.0</Version>
     <AssemblyName>CVROpenAITTS</AssemblyName>
+    <RootNamespace>CVROpenAITTS</RootNamespace>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
@@ -11,6 +12,10 @@
     <DebugType>embedded</DebugType>
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="voice_chat_256dp_E3E3E3_FILL0_wght400_GRAD0_opsz48.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="MelonLoader">
