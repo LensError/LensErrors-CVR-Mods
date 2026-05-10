@@ -41,6 +41,9 @@ namespace PlayerHistory
                     RefreshPlayerList();
                 };
 
+            controlsCat.AddButton("Refresh", "", "Refresh the player list", ButtonStyle.TextOnly)
+                .OnPress += RefreshPlayerList;
+
             controlsCat.AddButton("Clear History", "", "Clear all recorded players", ButtonStyle.TextOnly)
                 .OnPress += OnClearAllHeld;
 
@@ -59,7 +62,7 @@ namespace PlayerHistory
                 .OnPress += () =>
                 {
                     if (ms_detailUserId != null)
-                        QuickMenuAPI.OpenPlayerListByUserID(ms_detailUserId);
+                        Users.ShowDetails(ms_detailUserId);
                 };
 
             ms_encounterCat = ms_detailPage.AddCategory("Encounters", false);
