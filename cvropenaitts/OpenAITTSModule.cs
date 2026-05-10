@@ -1,14 +1,10 @@
 namespace CVROPENAI
 {
-    class OpenAITTSModule : HttpTTSModule
+    static class OpenAIVoices
     {
-        protected override string ModuleId => "OPENAI_TTS";
-
         internal static readonly string[] Presets =
         {
             "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer",
         };
-
-        protected override string[] PresetVoices => Presets;
     }
 }

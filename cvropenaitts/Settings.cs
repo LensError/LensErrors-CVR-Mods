@@ -7,42 +7,34 @@ using MelonLoader;
 
 namespace CVROPENAI
 {
+    enum Backend { Kokoro = 0, Morpheus = 1, OpenAI = 2, Custom = 3 }
+
     static class Settings
     {
         const string CategoryId   = "CVROpenAITTS";
-        const string CategoryName = "CVR OpenAI TTS";
+        const string CategoryName = "CVR AI Voice TTS";
 
-        // Local AI entries
-        static MelonPreferences_Entry<string> ms_localBaseUrl    = null!;
-        static MelonPreferences_Entry<string> ms_localModel      = null!;
-        static MelonPreferences_Entry<int>    ms_localPresetIdx  = null!;
-        static MelonPreferences_Entry<string> ms_localCustom     = null!;
-        static MelonPreferences_Entry<float>  ms_localSpeed      = null!;
-
-        // OpenAI entries
-        static MelonPreferences_Entry<string> ms_openBaseUrl     = null!;
-        static MelonPreferences_Entry<string> ms_openApiKey      = null!;
-        static MelonPreferences_Entry<string> ms_openModel       = null!;
-        static MelonPreferences_Entry<int>    ms_openPresetIdx   = null!;
-        static MelonPreferences_Entry<string> ms_openCustom      = null!;
-        static MelonPreferences_Entry<float>  ms_openSpeed       = null!;
+        static MelonPreferences_Entry<int>    ms_backend     = null!;
+        static MelonPreferences_Entry<string> ms_baseUrl     = null!;
+        static MelonPreferences_Entry<string> ms_apiKey      = null!;
+        static MelonPreferences_Entry<string> ms_model       = null!;
+        static MelonPreferences_Entry<int>    ms_langIdx     = null!;
+        static MelonPreferences_Entry<int>    ms_voiceIdx    = null!;
+        static MelonPreferences_Entry<string> ms_customVoice = null!;
+        static MelonPreferences_Entry<float>  ms_speed       = null!;
 
         internal static void Init()
         {
             var cat = MelonPreferences.CreateCategory(CategoryId, CategoryName);
 
-            ms_localBaseUrl   = cat.CreateEntry("LocalAI_BaseUrl",       "http://localhost:8880", "Local AI: Base URL",     "Base URL of your local OpenAI-compatible TTS server");
-            ms_localModel     = cat.CreateEntry("LocalAI_Model",         "kokoro",                "Local AI: Model",        "Model name sent in the request");
-            ms_localPresetIdx = cat.CreateEntry("LocalAI_PresetVoiceIdx", 0,                      "Local AI: Preset Voice", "Index of the selected preset voice");
-            ms_localCustom    = cat.CreateEntry("LocalAI_CustomVoice",   "",                      "Local AI: Custom Voice", "Custom voice name — overrides preset when non-empty");
-            ms_localSpeed     = cat.CreateEntry("LocalAI_Speed",         1.0f,                    "Local AI: Speed",        "Speech speed (0.25 – 4.0)");
-
-            ms_openBaseUrl    = cat.CreateEntry("OpenAI_BaseUrl",        "https://api.openai.com","OpenAI: Base URL",       "Base URL — change to use any OpenAI-compatible endpoint");
-            ms_openApiKey     = cat.CreateEntry("OpenAI_ApiKey",         "",                      "OpenAI: API Key",        "Bearer token sent in the Authorization header");
-            ms_openModel      = cat.CreateEntry("OpenAI_Model",          "tts-1",                 "OpenAI: Model",          "Model name (tts-1, tts-1-hd, …)");
-            ms_openPresetIdx  = cat.CreateEntry("OpenAI_PresetVoiceIdx", 0,                       "OpenAI: Preset Voice",   "Index of the selected preset voice");
-            ms_openCustom     = cat.CreateEntry("OpenAI_CustomVoice",    "",                      "OpenAI: Custom Voice",   "Custom voice name — overrides preset when non-empty");
-            ms_openSpeed      = cat.CreateEntry("OpenAI_Speed",          1.0f,                    "OpenAI: Speed",          "Speech speed (0.25 – 4.0)");
+            ms_backend     = cat.CreateEntry("Backend",     0,                       "Backend",      "TTS provider: 0=Kokoro, 1=Morpheus, 2=OpenAI, 3=Custom");
+            ms_baseUrl     = cat.CreateEntry("BaseUrl",     "http://localhost:8880",  "Base URL",     "Server base URL (auto-filled when you pick a backend)");
+            ms_apiKey      = cat.CreateEntry("ApiKey",      "",                       "API Key",      "Bearer token — required for OpenAI, leave blank for local servers");
+            ms_model       = cat.CreateEntry("Model",       "kokoro",                 "Model",        "Model name sent in the request (auto-filled when you pick a backend)");
+            ms_langIdx     = cat.CreateEntry("LangIdx",     0,                        "LangIdx",      "Selected language group index");
+            ms_voiceIdx    = cat.CreateEntry("VoiceIdx",    0,                        "VoiceIdx",     "Selected voice index within the language group");
+            ms_customVoice = cat.CreateEntry("CustomVoice", "",                       "Custom Voice", "Voice name override — takes priority over preset when non-empty");
+            ms_speed       = cat.CreateEntry("Speed",       1.0f,                     "Speed",        "Speech speed (0.25 – 4.0)");
 
             BuildUI();
         }
@@ -50,84 +42,144 @@ namespace CVROPENAI
         static void BuildUI()
         {
             var page = new Page(CategoryId, "Main", isRootPage: true);
-            page.MenuTitle    = "CVR OpenAI TTS";
-            page.MenuSubtitle = "Local AI & OpenAI TTS settings";
+            page.MenuTitle    = "AI Voice TTS";
+            page.MenuSubtitle = "Configure TTS provider and voice";
 
-            // --- Local AI ---
-            var localCat = page.AddCategory("Local AI TTS");
-            localCat.AddMelonStringInput(ms_localBaseUrl);
-            localCat.AddMelonStringInput(ms_localModel);
+            // --- Provider ---
+            var provCat = page.AddCategory("Provider");
 
-            var localSel = new MultiSelection(
-                "Local AI Voice",
-                LocalAITTSModule.Presets,
-                Math.Clamp(ms_localPresetIdx.Value, 0, LocalAITTSModule.Presets.Length - 1));
-            localSel.OnOptionUpdated += i =>
+            var backendSel = new MultiSelection(
+                "Backend",
+                new[] { "Kokoro (local)", "Morpheus (local)", "OpenAI", "Custom" },
+                Math.Clamp(ms_backend.Value, 0, 3));
+
+            backendSel.OnOptionUpdated += i =>
             {
-                ms_localPresetIdx.Value = i;
-                ms_localCustom.Value    = "";   // preset clears custom override
+                ms_backend.Value  = i;
+                ms_langIdx.Value  = 0;
+                ms_voiceIdx.Value = 0;
+                switch ((Backend)i)
+                {
+                    case Backend.Kokoro:
+                        ms_baseUrl.Value = "http://localhost:8880";
+                        ms_model.Value   = "kokoro";
+                        break;
+                    case Backend.Morpheus:
+                        ms_baseUrl.Value = "http://localhost:5005";
+                        ms_model.Value   = "tts-1";
+                        break;
+                    case Backend.OpenAI:
+                        ms_baseUrl.Value = "https://api.openai.com";
+                        ms_model.Value   = "tts-1";
+                        break;
+                    // Custom: leave whatever the user has
+                }
             };
-            localCat.AddButton("Voice Preset", "", "Pick from preset voice list", ButtonStyle.TextOnly)
-                .OnPress += () => QuickMenuAPI.OpenMultiSelect(localSel);
-            localCat.AddMelonStringInput(ms_localCustom);
-            localCat.AddMelonSlider(ms_localSpeed, 0.25f, 4.0f, decimalPlaces: 2, allowReset: true);
 
-            // --- OpenAI ---
-            var openCat = page.AddCategory("OpenAI TTS");
-            openCat.AddMelonStringInput(ms_openBaseUrl);
-            openCat.AddMelonStringInput(ms_openApiKey);
-            openCat.AddMelonStringInput(ms_openModel);
+            provCat.AddButton("Backend", "", "Select TTS provider — auto-fills URL and model", ButtonStyle.TextOnly)
+                .OnPress += () => QuickMenuAPI.OpenMultiSelect(backendSel);
 
-            var openSel = new MultiSelection(
-                "OpenAI Voice",
-                OpenAITTSModule.Presets,
-                Math.Clamp(ms_openPresetIdx.Value, 0, OpenAITTSModule.Presets.Length - 1));
-            openSel.OnOptionUpdated += i =>
+            provCat.AddMelonStringInput(ms_baseUrl);
+            provCat.AddMelonStringInput(ms_apiKey);
+            provCat.AddMelonStringInput(ms_model);
+
+            // --- Voice ---
+            var voiceCat = page.AddCategory("Voice");
+
+            // Language button — relevant for Kokoro and Morpheus; shows a note for others
+            voiceCat.AddButton("Language", "", "Pick language group (Kokoro & Morpheus)", ButtonStyle.TextOnly)
+                .OnPress += () =>
+                {
+                    Backend backend = CurrentBackend;
+                    string[] langs = backend switch
+                    {
+                        Backend.Kokoro   => KokoroVoices.Languages,
+                        Backend.Morpheus => MorpheusVoices.Languages,
+                        _                => new[] { "Not applicable — use Custom Voice" },
+                    };
+                    int clampedIdx = Math.Clamp(ms_langIdx.Value, 0, langs.Length - 1);
+                    var langSel = new MultiSelection("Language", langs, clampedIdx);
+                    langSel.OnOptionUpdated += i =>
+                    {
+                        ms_langIdx.Value  = i;
+                        ms_voiceIdx.Value = 0;
+                    };
+                    QuickMenuAPI.OpenMultiSelect(langSel);
+                };
+
+            // Voice preset button — list is built fresh each press based on current backend + language
+            voiceCat.AddButton("Voice Preset", "", "Pick from preset voices for the selected backend", ButtonStyle.TextOnly)
+                .OnPress += () =>
+                {
+                    Backend backend  = CurrentBackend;
+                    string[] voices  = GetVoiceList(backend);
+                    int clampedIdx   = Math.Clamp(ms_voiceIdx.Value, 0, voices.Length - 1);
+                    var voiceSel     = new MultiSelection("Voice", voices, clampedIdx);
+                    voiceSel.OnOptionUpdated += i =>
+                    {
+                        ms_voiceIdx.Value    = i;
+                        ms_customVoice.Value = "";
+                    };
+                    QuickMenuAPI.OpenMultiSelect(voiceSel);
+                };
+
+            voiceCat.AddMelonStringInput(ms_customVoice);
+
+            // --- Audio ---
+            var audioCat = page.AddCategory("Audio");
+            audioCat.AddMelonSlider(ms_speed, 0.25f, 4.0f, decimalPlaces: 2, allowReset: true);
+        }
+
+        static Backend CurrentBackend =>
+            (Backend)Math.Clamp(ms_backend?.Value ?? 0, 0, 3);
+
+        static string[] GetVoiceList(Backend backend)
+        {
+            switch (backend)
             {
-                ms_openPresetIdx.Value = i;
-                ms_openCustom.Value    = "";
-            };
-            openCat.AddButton("Voice Preset", "", "Pick from preset voice list", ButtonStyle.TextOnly)
-                .OnPress += () => QuickMenuAPI.OpenMultiSelect(openSel);
-            openCat.AddMelonStringInput(ms_openCustom);
-            openCat.AddMelonSlider(ms_openSpeed, 0.25f, 4.0f, decimalPlaces: 2, allowReset: true);
+                case Backend.Kokoro:
+                    int kLang = Math.Clamp(ms_langIdx?.Value ?? 0, 0, KokoroVoices.VoicesByLanguage.Length - 1);
+                    return KokoroVoices.VoicesByLanguage[kLang];
+                case Backend.Morpheus:
+                    int mLang = Math.Clamp(ms_langIdx?.Value ?? 0, 0, MorpheusVoices.VoicesByLanguage.Length - 1);
+                    return MorpheusVoices.VoicesByLanguage[mLang];
+                case Backend.OpenAI:
+                    return OpenAIVoices.Presets;
+                default:
+                    return new[] { "Set Custom Voice field below" };
+            }
         }
 
         // Accessors used by HttpTTSModule
-        public static string GetBaseUrl(string moduleId) =>
-            moduleId == "LOCAL_AI"
-                ? ms_localBaseUrl?.Value ?? "http://localhost:8880"
-                : ms_openBaseUrl?.Value  ?? "https://api.openai.com";
+        public static string GetBaseUrl() => ms_baseUrl?.Value ?? "http://localhost:8880";
+        public static string GetApiKey()  => ms_apiKey?.Value  ?? "";
+        public static string GetModel()   => ms_model?.Value   ?? "kokoro";
+        public static float  GetSpeed()   => ms_speed?.Value   ?? 1.0f;
 
-        public static string GetApiKey(string moduleId) =>
-            moduleId == "LOCAL_AI" ? "" : ms_openApiKey?.Value ?? "";
-
-        public static string GetModel(string moduleId) =>
-            moduleId == "LOCAL_AI"
-                ? ms_localModel?.Value ?? "kokoro"
-                : ms_openModel?.Value  ?? "tts-1";
-
-        public static string GetVoice(string moduleId)
+        public static string GetVoice()
         {
-            if (moduleId == "LOCAL_AI")
+            string custom = ms_customVoice?.Value ?? "";
+            if (!string.IsNullOrEmpty(custom)) return custom;
+
+            Backend backend  = CurrentBackend;
+            int langIdx      = ms_langIdx?.Value  ?? 0;
+            int voiceIdx     = ms_voiceIdx?.Value ?? 0;
+
+            switch (backend)
             {
-                string custom = ms_localCustom?.Value ?? "";
-                if (!string.IsNullOrEmpty(custom)) return custom;
-                int idx = Math.Clamp(ms_localPresetIdx?.Value ?? 0, 0, LocalAITTSModule.Presets.Length - 1);
-                return LocalAITTSModule.Presets[idx];
-            }
-            else
-            {
-                string custom = ms_openCustom?.Value ?? "";
-                if (!string.IsNullOrEmpty(custom)) return custom;
-                int idx = Math.Clamp(ms_openPresetIdx?.Value ?? 0, 0, OpenAITTSModule.Presets.Length - 1);
-                return OpenAITTSModule.Presets[idx];
+                case Backend.Kokoro:
+                    langIdx = Math.Clamp(langIdx, 0, KokoroVoices.VoicesByLanguage.Length - 1);
+                    string[] kv = KokoroVoices.VoicesByLanguage[langIdx];
+                    return kv[Math.Clamp(voiceIdx, 0, kv.Length - 1)];
+                case Backend.Morpheus:
+                    langIdx = Math.Clamp(langIdx, 0, MorpheusVoices.VoicesByLanguage.Length - 1);
+                    string[] mv = MorpheusVoices.VoicesByLanguage[langIdx];
+                    return mv[Math.Clamp(voiceIdx, 0, mv.Length - 1)];
+                case Backend.OpenAI:
+                    return OpenAIVoices.Presets[Math.Clamp(voiceIdx, 0, OpenAIVoices.Presets.Length - 1)];
+                default:
+                    return "";
             }
         }
-
-        public static float GetSpeed(string moduleId) =>
-            moduleId == "LOCAL_AI"
-                ? ms_localSpeed?.Value ?? 1.0f
-                : ms_openSpeed?.Value  ?? 1.0f;
     }
 }

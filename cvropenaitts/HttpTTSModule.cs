@@ -10,17 +10,12 @@ namespace CVROPENAI
 {
     abstract class HttpTTSModule : Comms_TTSModule
     {
-        // Shared across all HTTP modules — HttpClient is thread-safe
         static readonly HttpClient s_http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-
-        protected abstract string ModuleId { get; }
-        protected abstract string[] PresetVoices { get; }
 
         public override void Initialize()
         {
             SampleRate = 24000;
-            Channels = 1;
-            // Single placeholder — directs users to the Quick Menu
+            Channels   = 1;
             Voices["_qm"] = "Change voice in Quick Menu";
         }
 
@@ -28,11 +23,11 @@ namespace CVROPENAI
         {
             try
             {
-                string baseUrl = Settings.GetBaseUrl(ModuleId).TrimEnd('/');
-                string apiKey  = Settings.GetApiKey(ModuleId);
-                string model   = Settings.GetModel(ModuleId);
-                string voice   = Settings.GetVoice(ModuleId);
-                float  speed   = Settings.GetSpeed(ModuleId);
+                string baseUrl = Settings.GetBaseUrl().TrimEnd('/');
+                string apiKey  = Settings.GetApiKey();
+                string model   = Settings.GetModel();
+                string voice   = Settings.GetVoice();
+                float  speed   = Settings.GetSpeed();
 
                 string json = BuildJson(model, msg, voice, speed);
 
@@ -46,7 +41,6 @@ namespace CVROPENAI
                 response.EnsureSuccessStatusCode();
 
                 byte[] bytes = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
-                // OpenAI PCM format: 16-bit signed little-endian @ 24 kHz, no header
                 int sampleCount = bytes.Length / 2;
                 short[] pcm = new short[sampleCount];
                 Buffer.BlockCopy(bytes, 0, pcm, 0, sampleCount * 2);
@@ -54,7 +48,7 @@ namespace CVROPENAI
             }
             catch (Exception ex)
             {
-                MelonLogger.Error($"[CVROpenAITTS/{ModuleId}] {ex.Message}");
+                MelonLogger.Error($"[CVROpenAITTS] {ex.Message}");
                 return System.Array.Empty<short>();
             }
         }
@@ -62,15 +56,15 @@ namespace CVROPENAI
         static string BuildJson(string model, string input, string voice, float speed)
         {
             return "{" +
-                $"\"model\":{JsonString(model)}," +
-                $"\"input\":{JsonString(input)}," +
-                $"\"voice\":{JsonString(voice)}," +
+                $"\"model\":{Esc(model)}," +
+                $"\"input\":{Esc(input)}," +
+                $"\"voice\":{Esc(voice)}," +
                 "\"response_format\":\"pcm\"," +
                 $"\"speed\":{speed.ToString("F2", CultureInfo.InvariantCulture)}" +
                 "}";
         }
 
-        static string JsonString(string s) =>
+        static string Esc(string s) =>
             "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"")
                     .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t") + "\"";
     }
