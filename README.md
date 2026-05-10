@@ -7,6 +7,7 @@
 | Mod | Notes | Download |
 |-----|-------|----------|
 | [Player History](playerhistory/) | Records players you've encountered, with timestamps and a friends filter | Coming soon |
+| [CVR OpenAI TTS](cvropenaitts/) | Adds Local AI and OpenAI-compatible TTS modules alongside the built-in Windows voice | Coming soon |
 
 
 > [!IMPORTANT]
