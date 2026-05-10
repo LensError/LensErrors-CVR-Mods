@@ -20,13 +20,8 @@ namespace CVROPENAI
         {
             SampleRate = 24000;
             Channels = 1;
-            foreach (string v in PresetVoices)
-                Voices[v] = v;
-
-            // Include any custom voice saved in settings so the game's voice selector sees it
-            string saved = Settings.GetVoice(ModuleId);
-            if (!string.IsNullOrEmpty(saved) && !Voices.ContainsKey(saved))
-                Voices[saved] = saved;
+            // Single placeholder — directs users to the Quick Menu
+            Voices["_qm"] = "Change voice in Quick Menu";
         }
 
         public override short[] Process(string msg)
@@ -38,9 +33,6 @@ namespace CVROPENAI
                 string model   = Settings.GetModel(ModuleId);
                 string voice   = Settings.GetVoice(ModuleId);
                 float  speed   = Settings.GetSpeed(ModuleId);
-
-                if (string.IsNullOrEmpty(voice))
-                    voice = CurrentVoice;
 
                 string json = BuildJson(model, msg, voice, speed);
 
