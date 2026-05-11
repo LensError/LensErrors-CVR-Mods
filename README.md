@@ -6,7 +6,7 @@ A collection of mods I've made for ChilloutVR. Some original ideas, some takes o
 
 | Mod | Notes | Download |
 |-----|-------|----------|
-| [BetterScrollFlight](BetterScrollFlight/README.md) | Scroll wheel adjusts flight speed while flying in worlds that allow it, with optional modifier key | Coming Soon |
+| [BetterScrollFlight](BetterScrollFlight/README.md) | Scroll wheel adjusts flight speed while flying in worlds that allow it, with optional modifier key | [Download](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/BetterScrollFlight.dll) |
 | [Player History](playerhistory/README.md) | Records players you've encountered, with timestamps and a friends filter | [Download](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll) |
 | [CVR OpenAI TTS](cvropenaitts/README.md) | Adds local AI and OpenAI-compatible TTS modules alongside the built-in Windows voice | [Download](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/CVROpenAITTS.dll) |
 
