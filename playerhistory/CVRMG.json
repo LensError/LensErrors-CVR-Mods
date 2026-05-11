@@ -1,0 +1,25 @@
+{
+  "_id": -1,
+  "name": "Player History",
+  "modversion": "1.0.0",
+  "gameversion": "2026r181",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "Records every player who joins your instance and keeps a timestamped encounter log. Stores the last 10 encounter timestamps per player and tracks up to 200 players total, dropping the oldest entries when the limit is reached. History is saved to UserData/PlayerHistory.tsv and persists between sessions.\n\nQuick Menu features:\n- Full history list sorted by most recently seen, with relative timestamps\n- Click any player to see a detail page with every recorded encounter date and time\n- Friends Only filter to show only CVR friends\n- Clear History button with confirmation dialog\n- Player select panel integration: shows when you last saw a selected player",
+  "searchtags": [
+    "history",
+    "players",
+    "social",
+    "log",
+    "encounters",
+    "tracking"
+  ],
+  "requirements": [
+    "[BTKUILib](https://github.com/BTK-Development/BTKUILib)"
+  ],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods",
+  "changelog": "Initial release",
+  "embedcolor": "#5865F2"
+}

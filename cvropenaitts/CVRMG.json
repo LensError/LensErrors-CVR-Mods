@@ -1,0 +1,26 @@
+{
+  "_id": -1,
+  "name": "CVR AI Voice TTS",
+  "modversion": "1.0.0",
+  "gameversion": "2026r181",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "Adds AI-powered TTS modules to ChilloutVR that send your chat messages to an OpenAI-compatible /v1/audio/speech endpoint instead of the built-in Windows voice. Supports Kokoro, Morpheus, OpenAI, and any custom OpenAI-compatible server. Audio is requested as 16-bit PCM at 24 kHz and plays through the game's normal TTS path.\n\nSupported backends:\n- Kokoro (default: http://localhost:8880)\n- Morpheus (default: http://localhost:5005)\n- OpenAI (https://api.openai.com)\n- Custom — any URL you specify\n\nSettings via Quick Menu: backend picker, base URL, API key, model name, voice preset, custom voice override, and speech speed (0.25–4.0). The active module is selected in CVR audio settings alongside the built-in voice.\n\nRequires a running OpenAI-compatible TTS server or an OpenAI API key. API key and base URL are stored in UserData/MelonPreferences.cfg.",
+  "searchtags": [
+    "tts",
+    "text to speech",
+    "ai",
+    "voice",
+    "openai",
+    "kokoro",
+    "chat"
+  ],
+  "requirements": [
+    "[BTKUILib](https://github.com/BTK-Development/BTKUILib)"
+  ],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/CVROpenAITTS.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods",
+  "changelog": "Initial release",
+  "embedcolor": "#5865F2"
+}
