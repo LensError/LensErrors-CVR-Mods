@@ -4,6 +4,8 @@ While flying in worlds that have flight enabled, scroll the mouse wheel to adjus
 
 Requires [UI Expansion Kit](https://github.com/knah/CVRMods).
 
+Inspired by [NAK's ScrollFlight](https://github.com/NotAKidoS/NAK_CVR_Mods/blob/main/ScrollFlight/), no code was copied or directly referenced, except as a guide for how to interact with the CVR HUD.
+
 ## Usage
 
 Just fly — scrolling up increases speed, scrolling down decreases it. The speed scale persists between sessions.
