@@ -62,7 +62,7 @@ namespace PlayerHistory
                 .OnPress += () =>
                 {
                     if (ms_detailUserId != null)
-                        Users.ShowDetails(ms_detailUserId);
+                        ABI_RC.Core.InteractionSystem.ViewManager.Instance.RequestUserDetailsPage(ms_detailUserId);
                 };
 
             ms_encounterCat = ms_detailPage.AddCategory("Encounters", false);
