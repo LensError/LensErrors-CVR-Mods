@@ -2,7 +2,7 @@ using ABI_RC.Systems.Communications.Audio.TTS;
 using BTKUILib;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(CVROPENAI.Main), "CVR AI Voice TTS", "2.0.0", "LensError")]
+[assembly: MelonInfo(typeof(CVROPENAI.Main), "CVR AI Voice TTS", "1.0.0", "LensError")]
 [assembly: MelonGame(null, "ChilloutVR")]
 
 namespace CVROPENAI
