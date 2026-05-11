@@ -26,6 +26,7 @@ namespace PlayerHistory
     {
         static readonly string s_filePath = Path.Combine(MelonEnvironment.UserDataDirectory, "PlayerHistory.tsv");
 
+        const int c_maxEntries    = 1000;
         const int c_maxEncounters = 10;
 
         internal static readonly List<PlayerEntry> Entries = new List<PlayerEntry>();
@@ -107,7 +108,7 @@ namespace PlayerHistory
             }
             else
             {
-                if (Entries.Count >= Settings.MaxEntries)
+                if (Entries.Count >= c_maxEntries)
                     EvictOldest();
 
                 Entries.Add(new PlayerEntry
@@ -122,7 +123,7 @@ namespace PlayerHistory
 
         internal static void TrimToLimit()
         {
-            while (Entries.Count > Settings.MaxEntries)
+            while (Entries.Count > c_maxEntries)
                 EvictOldest();
         }
 

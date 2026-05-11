@@ -19,16 +19,8 @@ namespace PlayerHistory
         static Category ms_encounterCat;
         static string ms_detailUserId;
 
-        static MelonPreferences_Entry<int> ms_maxEntries;
-        static Button ms_maxEntriesBtn;
-
-        public static int MaxEntries => ms_maxEntries?.Value ?? 500;
-
         internal static void Init()
         {
-            var cat = MelonPreferences.CreateCategory("PlayerHistory", "Player History");
-            ms_maxEntries = cat.CreateEntry("MaxEntries", 1000, "History Cap", "Maximum number of players to store");
-
             BuildUI();
             QuickMenuAPI.OnPlayerSelected += OnPlayerSelected;
         }
@@ -50,18 +42,6 @@ namespace PlayerHistory
 
             controlsCat.AddButton("Refresh", "", "Refresh the player list", ButtonStyle.TextOnly)
                 .OnPress += RefreshPlayerList;
-
-            ms_maxEntriesBtn = controlsCat.AddButton($"Cap: {MaxEntries}", "", "Set maximum history size", ButtonStyle.TextOnly);
-            ms_maxEntriesBtn.OnPress += () =>
-            {
-                QuickMenuAPI.OpenNumberInput("History Cap", MaxEntries, value =>
-                {
-                    ms_maxEntries.Value      = Math.Clamp((int)value, 10, 5000);
-                    ms_maxEntriesBtn.ButtonText = $"Cap: {MaxEntries}";
-                    HistoryData.TrimToLimit();
-                    HistoryData.Save();
-                });
-            };
 
             controlsCat.AddButton("Clear History", "", "Clear all recorded players", ButtonStyle.TextOnly)
                 .OnPress += OnClearAllHeld;
