@@ -3,6 +3,7 @@ using MelonLoader.Utils;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace PlayerHistory
@@ -18,14 +19,13 @@ namespace PlayerHistory
         public string UserId;
         public string DisplayName;
         public DateTime LastSeen;
-        public List<Encounter> Encounters; // newest first, max 10
+        public List<Encounter> Encounters;
     }
 
     static class HistoryData
     {
         static readonly string s_filePath = Path.Combine(MelonEnvironment.UserDataDirectory, "PlayerHistory.tsv");
 
-        const int c_maxEntries = 100;
         const int c_maxEncounters = 10;
 
         internal static readonly List<PlayerEntry> Entries = new List<PlayerEntry>();
@@ -58,17 +58,14 @@ namespace PlayerHistory
 
                     Entries.Add(new PlayerEntry
                     {
-                        UserId = p[0],
+                        UserId      = p[0],
                         DisplayName = p[1],
-                        LastSeen = DateTime.FromFileTimeUtc(ft).ToLocalTime(),
-                        Encounters = encounters
+                        LastSeen    = DateTime.FromFileTimeUtc(ft).ToLocalTime(),
+                        Encounters  = encounters
                     });
                 }
             }
-            catch (Exception ex)
-            {
-                MelonLogger.Error(ex);
-            }
+            catch (Exception ex) { MelonLogger.Error(ex); }
         }
 
         internal static void Save()
@@ -85,70 +82,52 @@ namespace PlayerHistory
                         e.UserId,
                         e.DisplayName.Replace("\t", " "),
                         e.LastSeen.ToFileTimeUtc(),
-                        encounterStr
-                    ));
+                        encounterStr));
                 }
             }
-            catch (Exception ex)
-            {
-                MelonLogger.Error(ex);
-            }
+            catch (Exception ex) { MelonLogger.Error(ex); }
         }
 
-        internal static PlayerEntry Find(string userId)
-        {
-            foreach (var e in Entries)
-                if (e.UserId == userId) return e;
-            return null;
-        }
+        internal static PlayerEntry Find(string userId) =>
+            Entries.FirstOrDefault(e => e.UserId == userId);
 
         internal static void AddOrUpdate(string userId, string displayName, string worldName)
         {
-            var now = DateTime.Now;
-            var enc = new Encounter { Time = now, World = worldName ?? "" };
+            var now      = DateTime.Now;
+            var enc      = new Encounter { Time = now, World = worldName ?? "" };
             var existing = Find(userId);
+
             if (existing != null)
             {
                 existing.DisplayName = displayName;
-                existing.LastSeen = now;
+                existing.LastSeen    = now;
                 existing.Encounters.Insert(0, enc);
                 if (existing.Encounters.Count > c_maxEncounters)
                     existing.Encounters.RemoveAt(existing.Encounters.Count - 1);
             }
             else
             {
-                if (Entries.Count >= c_maxEntries)
-                {
-                    int oldestIdx = 0;
-                    for (int i = 1; i < Entries.Count; i++)
-                        if (Entries[i].LastSeen < Entries[oldestIdx].LastSeen)
-                            oldestIdx = i;
-                    Entries.RemoveAt(oldestIdx);
-                }
+                if (Entries.Count >= Settings.MaxEntries)
+                    EvictOldest();
 
                 Entries.Add(new PlayerEntry
                 {
-                    UserId = userId,
+                    UserId      = userId,
                     DisplayName = displayName,
-                    LastSeen = now,
-                    Encounters = new List<Encounter> { enc }
+                    LastSeen    = now,
+                    Encounters  = new List<Encounter> { enc }
                 });
             }
         }
 
-        internal static bool Remove(string userId)
+        internal static void TrimToLimit()
         {
-            for (int i = 0; i < Entries.Count; i++)
-            {
-                if (Entries[i].UserId == userId)
-                {
-                    Entries.RemoveAt(i);
-                    return true;
-                }
-            }
-            return false;
+            while (Entries.Count > Settings.MaxEntries)
+                EvictOldest();
         }
 
         internal static void Clear() => Entries.Clear();
+
+        static void EvictOldest() => Entries.Remove(Entries.OrderBy(e => e.LastSeen).First());
     }
 }

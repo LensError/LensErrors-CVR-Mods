@@ -10,7 +10,7 @@ namespace PlayerHistory
 {
     static class Settings
     {
-        static bool ms_friendsOnly = false;
+        static bool ms_friendsOnly;
 
         static Category ms_playerListCat;
         static TextBlock ms_playerContextText;
@@ -19,8 +19,16 @@ namespace PlayerHistory
         static Category ms_encounterCat;
         static string ms_detailUserId;
 
+        static MelonPreferences_Entry<int> ms_maxEntries;
+        static Button ms_maxEntriesBtn;
+
+        public static int MaxEntries => ms_maxEntries?.Value ?? 500;
+
         internal static void Init()
         {
+            var cat = MelonPreferences.CreateCategory("PlayerHistory", "Player History");
+            ms_maxEntries = cat.CreateEntry("MaxEntries", 1000, "History Cap", "Maximum number of players to store");
+
             BuildUI();
             QuickMenuAPI.OnPlayerSelected += OnPlayerSelected;
         }
@@ -31,7 +39,6 @@ namespace PlayerHistory
             page.MenuTitle = "Player History";
             page.MenuSubtitle = "Players you've met";
 
-            // Controls row
             var controlsCat = page.AddCategory("Controls", false);
 
             controlsCat.AddToggle("Friends Only", "Only show players on your friends list", ms_friendsOnly)
@@ -44,14 +51,24 @@ namespace PlayerHistory
             controlsCat.AddButton("Refresh", "", "Refresh the player list", ButtonStyle.TextOnly)
                 .OnPress += RefreshPlayerList;
 
+            ms_maxEntriesBtn = controlsCat.AddButton($"Cap: {MaxEntries}", "", "Set maximum history size", ButtonStyle.TextOnly);
+            ms_maxEntriesBtn.OnPress += () =>
+            {
+                QuickMenuAPI.OpenNumberInput("History Cap", MaxEntries, value =>
+                {
+                    ms_maxEntries.Value      = Math.Clamp((int)value, 10, 5000);
+                    ms_maxEntriesBtn.ButtonText = $"Cap: {MaxEntries}";
+                    HistoryData.TrimToLimit();
+                    HistoryData.Save();
+                });
+            };
+
             controlsCat.AddButton("Clear History", "", "Clear all recorded players", ButtonStyle.TextOnly)
                 .OnPress += OnClearAllHeld;
 
-            // Player list
             ms_playerListCat = page.AddCategory("History", false);
             page.OnPageOpen += RefreshPlayerList;
 
-            // Detail page — hidden nav button, opened programmatically
             var detailNavCat = page.AddCategory("DetailNav", false);
             ms_detailPage = detailNavCat.AddPage("Detail", "", "", "PlayerHistory");
             ms_detailPage.SubpageButton.Hidden = true;
@@ -96,13 +113,12 @@ namespace PlayerHistory
 
                 foreach (var entry in sorted)
                 {
-                    var e = entry;
                     ms_playerListCat.AddButton(
-                        $"{e.DisplayName}  ·  {FormatRelative(e.LastSeen)}",
+                        $"{entry.DisplayName}  ·  {FormatRelative(entry.LastSeen)}",
                         "",
                         "View encounter history",
                         ButtonStyle.TextOnly
-                    ).OnPress += () => OpenPlayerEntry(e);
+                    ).OnPress += () => OpenPlayerEntry(entry);
                 }
             }
             catch (Exception ex)
