@@ -2,9 +2,11 @@
 
 ![Player History preview](img/image.png)
 
+[Download latest](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll)
+
 ## What it does
 
-Every time a player joins your instance they are added to your history. The mod stores the last 10 encounter timestamps per player and keeps at most 100 players total, dropping the oldest when the limit is reached.
+Every time a player joins your instance they are added to your history. The mod stores the last 10 encounter timestamps per player and keeps at most 200 players total, dropping the oldest when the limit is reached.
 
 The history is saved to `UserData/PlayerHistory.tsv` and persists between sessions.
 

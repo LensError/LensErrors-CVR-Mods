@@ -26,7 +26,7 @@ namespace PlayerHistory
     {
         static readonly string s_filePath = Path.Combine(MelonEnvironment.UserDataDirectory, "PlayerHistory.tsv");
 
-        const int c_maxEntries    = 1000;
+        const int c_maxEntries    = 200;
         const int c_maxEncounters = 10;
 
         internal static readonly List<PlayerEntry> Entries = new List<PlayerEntry>();
