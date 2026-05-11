@@ -8,10 +8,10 @@ Inspired by [NAK's ScrollFlight](https://github.com/NotAKidoS/NAK_CVR_Mods/blob/
 
 ## Usage
 
-Just fly — scrolling up increases speed, scrolling down decreases it. The speed scale persists between sessions.
+Just fly - scrolling up increases speed, scrolling down decreases it. The speed scale persists between sessions.
 
-- **Scroll wheel** — adjust flight speed
-- **Double middle-click** — reset speed to 1x
+- **Scroll wheel** - adjust flight speed
+- **Double middle-click** - reset speed to 1x
 
 ## Settings
 

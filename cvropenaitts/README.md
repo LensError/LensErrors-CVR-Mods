@@ -24,19 +24,19 @@ Both modules request 16-bit PCM audio at 24 kHz, which the game resamples and pl
 Open the QuickMenu and navigate to the **CVR OpenAI TTS** tab.
 
 **Local AI TTS**
-- **Local AI: Base URL** — base URL of your local server (no trailing slash)
-- **Local AI: Model** — model name passed in the request (default: `kokoro`)
-- **Voice Preset** — pick from common Kokoro / OpenAI-compatible voice names
-- **Local AI: Custom Voice** — type any voice name your server supports; overrides the preset when non-empty
-- **Local AI: Speed** — speech speed from 0.25 to 4.0
+- **Local AI: Base URL** - base URL of your local server (no trailing slash)
+- **Local AI: Model** - model name passed in the request (default: `kokoro`)
+- **Voice Preset** - pick from common Kokoro / OpenAI-compatible voice names
+- **Local AI: Custom Voice** - type any voice name your server supports; overrides the preset when non-empty
+- **Local AI: Speed** - speech speed from 0.25 to 4.0
 
 **OpenAI TTS**
-- **OpenAI: Base URL** — change this to use any OpenAI-compatible hosted endpoint
-- **OpenAI: API Key** — Bearer token sent in the `Authorization` header
-- **OpenAI: Model** — model name (default: `tts-1`, also `tts-1-hd`)
-- **Voice Preset** — pick from the standard OpenAI voice list
-- **OpenAI: Custom Voice** — type any voice name your endpoint supports; overrides the preset when non-empty
-- **OpenAI: Speed** — speech speed from 0.25 to 4.0
+- **OpenAI: Base URL** - change this to use any OpenAI-compatible hosted endpoint
+- **OpenAI: API Key** - Bearer token sent in the `Authorization` header
+- **OpenAI: Model** - model name (default: `tts-1`, also `tts-1-hd`)
+- **Voice Preset** - pick from the standard OpenAI voice list
+- **OpenAI: Custom Voice** - type any voice name your endpoint supports; overrides the preset when non-empty
+- **OpenAI: Speed** - speech speed from 0.25 to 4.0
 
 Settings are saved to `UserData/MelonPreferences.cfg` and persist between sessions.
 
