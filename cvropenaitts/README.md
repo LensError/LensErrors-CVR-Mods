@@ -1,6 +1,6 @@
 # CVR OpenAI TTS
 
-[Download latest](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/CVROpenAITTS.dll)
+[![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/CVROpenAITTS.dll)
 
 Adds two new TTS modules to ChilloutVR that send your chat messages to an OpenAI-compatible `/v1/audio/speech` endpoint instead of using the built-in Windows voice.
 

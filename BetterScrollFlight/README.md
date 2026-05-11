@@ -1,5 +1,7 @@
 # BetterScrollFlight
 
+[![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/BetterScrollFlight.dll)
+
 While flying in worlds that have flight enabled, scroll the mouse wheel to adjust your flight speed. Double-click the middle mouse button to reset it back to 1x.
 
 Requires [UI Expansion Kit](https://github.com/knah/CVRMods).

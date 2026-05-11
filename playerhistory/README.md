@@ -2,7 +2,7 @@
 
 ![Player History preview](img/image.png)
 
-[Download latest](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll)
+[![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll)
 
 ## What it does
 
