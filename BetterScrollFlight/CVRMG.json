@@ -18,7 +18,7 @@
   "requirements": [
     "[UI Expansion Kit](https://github.com/knah/CVRMods)"
   ],
-  "downloadlink": "",
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/BetterScrollFlight.dll",
   "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods",
   "changelog": "Initial release",
   "embedcolor": "#5865F2"
