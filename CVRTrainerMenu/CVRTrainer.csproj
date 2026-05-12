@@ -5,6 +5,7 @@
     <Version>0.1.0</Version>
     <AssemblyName>CVRTrainer</AssemblyName>
     <RootNamespace>CVRTrainer</RootNamespace>
+    <FailOnCVRDeployError>false</FailOnCVRDeployError>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -33,6 +34,11 @@
       <Private>false</Private>
       <SpecificVersion>false</SpecificVersion>
     </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
     <Reference Include="UnityEngine.TextRenderingModule">
       <HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>false</Private>
@@ -55,7 +61,12 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="609576__cjspellsfish__oldvgmenu.wav" />
+  </ItemGroup>
+
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="copy /y &quot;$(TargetPath)&quot; &quot;$(CVRPath)/Mods/&quot;" />
+    <Exec Condition="'$(FailOnCVRDeployError)' == 'true'" Command="copy /y &quot;$(TargetPath)&quot; &quot;$(CVRPath)/Mods/&quot;" />
+    <Exec Condition="'$(FailOnCVRDeployError)' != 'true'" Command="copy /y &quot;$(TargetPath)&quot; &quot;$(CVRPath)/Mods/&quot;" IgnoreExitCode="true" />
   </Target>
 </Project>

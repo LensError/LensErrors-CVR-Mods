@@ -11,6 +11,8 @@ using ABI_RC.Systems.InputManagement;
 using ABI_RC.Systems.Movement;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using UnityEngine;
 
 namespace CVRTrainer
@@ -18,6 +20,8 @@ namespace CVRTrainer
     [DisallowMultipleComponent]
     class TrainerMenuComponent : MonoBehaviour
     {
+        static TrainerMenuComponent _instance;
+
         enum MenuPage
         {
             Main,
@@ -45,12 +49,16 @@ namespace CVRTrainer
         const float RowHeight = 30f;
         const float FooterHeight = 34f;
         const float Margin = 34f;
+        const int SpawnableFolderCount = 4;
+        const string NavigateSoundResource = "CVRTrainer.609576__cjspellsfish__oldvgmenu.wav";
+        const string InputLockId = "CVRTrainerMenu";
 
         static readonly string[] MainItems = {
             "Player",
             "World",
             "Vehicle Spawner",
-            "Prop Spawner"
+            "Prop Spawner",
+            "Close Menu"
         };
 
         static readonly string[] PlayerItems = {
@@ -124,11 +132,10 @@ namespace CVRTrainer
         bool _hasSavedPosition;
         string _lastVehicleInstanceId = string.Empty;
         string _lastPropInstanceId = string.Empty;
-        bool _ownsInputLock;
-        bool _previousInputEnabled = true;
         string _guidInput = string.Empty;
         string _renameInput = string.Empty;
         bool _textFieldActive;
+        bool _textFieldFocusPending;
         string _status = "Ready";
         float _statusUntil;
 
@@ -147,16 +154,37 @@ namespace CVRTrainer
         GUIStyle _selectedValueStyle;
         GUIStyle _footerStyle;
         GUIStyle _textFieldStyle;
+        Rect _lastMenuRect;
+        AudioSource _audioSource;
+        AudioClip _navigateClip;
+        float _lastSoundTime;
+        bool _gameInputLocked;
 
         void Awake()
         {
+            if (_instance != null && _instance != this)
+            {
+                UnityEngine.Object.Destroy(gameObject);
+                return;
+            }
+
+            _instance = this;
             Object.DontDestroyOnLoad(gameObject);
+            _audioSource = gameObject.AddComponent<AudioSource>();
+            _audioSource.playOnAwake = false;
+            _audioSource.spatialBlend = 0f;
+            _audioSource.volume = 0.65f;
+            _navigateClip = LoadEmbeddedWav(NavigateSoundResource);
             StartCoroutine(ResolveSavedEntries());
         }
 
         void OnDestroy()
         {
             SetGameInputLocked(false);
+
+            if (_instance == this)
+                _instance = null;
+
             DestroyTexture(_headerTexture);
             DestroyTexture(_subHeaderTexture);
             DestroyTexture(_bodyTexture);
@@ -164,52 +192,55 @@ namespace CVRTrainer
             DestroyTexture(_selectedTexture);
             DestroyTexture(_accentTexture);
             DestroyTexture(_footerTexture);
+            if (_navigateClip != null)
+                UnityEngine.Object.Destroy(_navigateClip);
         }
 
         void Update()
         {
             if (Input.GetKeyDown(ToggleKey))
             {
-                _isOpen = !_isOpen;
-                SetGameInputLocked(_isOpen);
+                SetMenuOpen(!_isOpen);
                 return;
             }
 
             if (!_isOpen)
                 return;
 
-            SetGameInputLocked(true);
-
-            if (Pressed(KeyCode.DownArrow, KeyCode.Keypad2))
-                MoveSelection(1);
-            else if (Pressed(KeyCode.UpArrow, KeyCode.Keypad8))
-                MoveSelection(-1);
-            else if (Pressed(KeyCode.LeftArrow, KeyCode.Keypad4))
-                AdjustOption(-1);
-            else if (Pressed(KeyCode.RightArrow, KeyCode.Keypad6))
-                AdjustOption(1);
-            else if (_textFieldActive)
+            if (_textFieldActive)
             {
-                if (Pressed(KeyCode.Return, KeyCode.Keypad5))
+                if (Pressed(KeyCode.Return, KeyCode.KeypadEnter, KeyCode.Keypad5))
                 {
-                    _textFieldActive = false;
+                    EndTextEntry();
                     _selectedIndex = 1;
                     ActivateSelected();
                 }
-                else if (Pressed(KeyCode.Keypad0, KeyCode.Escape))
-                    _textFieldActive = false;
-                // Backspace is consumed by the text field — don't trigger Back()
+                else if (Pressed(KeyCode.Escape, KeyCode.Keypad0))
+                {
+                    EndTextEntry();
+                }
+                // Backspace is consumed by the text field, so don't trigger Back().
             }
-            else if (Pressed(KeyCode.Return, KeyCode.Keypad5))
+            else if (Pressed(KeyCode.K, KeyCode.DownArrow, KeyCode.Keypad2))
+                MoveSelection(1);
+            else if (Pressed(KeyCode.I, KeyCode.UpArrow, KeyCode.Keypad8))
+                MoveSelection(-1);
+            else if (Pressed(KeyCode.J, KeyCode.LeftArrow, KeyCode.Keypad4))
+                AdjustOption(-1);
+            else if (Pressed(KeyCode.L, KeyCode.RightArrow, KeyCode.Keypad6))
+                AdjustOption(1);
+            else if (Pressed(KeyCode.Return, KeyCode.KeypadEnter, KeyCode.Keypad5, KeyCode.U))
             {
                 bool isTextRow = (IsAddPage() || _page == MenuPage.RenameSpawnable) && _selectedIndex == 0;
                 if (isTextRow)
-                    _textFieldActive = true;
+                    BeginTextEntry();
                 else
                     ActivateSelected();
             }
-            else if (Pressed(KeyCode.Backspace, KeyCode.Keypad0, KeyCode.Escape))
+            else if (Pressed(KeyCode.Backspace, KeyCode.O, KeyCode.Escape, KeyCode.Keypad0))
                 Back();
+
+            ClearGameInputState();
         }
 
         void OnGUI()
@@ -224,6 +255,7 @@ namespace CVRTrainer
             float bodyHeight = (items.Length * RowHeight) + FooterHeight;
             float x = Mathf.Max(Margin, Screen.width - MenuWidth - Margin);
             float y = Margin;
+            _lastMenuRect = new Rect(x, y, MenuWidth, HeaderHeight + SubHeaderHeight + bodyHeight);
 
             var headerRect = new Rect(x, y, MenuWidth, HeaderHeight);
             var accentRect = new Rect(x, y + HeaderHeight - 4f, MenuWidth, 4f);
@@ -240,11 +272,16 @@ namespace CVRTrainer
             float rowY = bodyRect.y;
             for (int i = 0; i < items.Length; i++)
             {
+                var rowRect = new Rect(x, rowY + (i * RowHeight), MenuWidth, RowHeight);
+                HandleMouseRow(rowRect, i);
+
                 if ((IsAddPage() || _page == MenuPage.RenameSpawnable) && i == 0)
-                    DrawTextInputRow(x, rowY + (i * RowHeight), items[i], _page == MenuPage.RenameSpawnable, i == _selectedIndex);
+                    DrawTextInputRow(x, rowRect.y, items[i], _page == MenuPage.RenameSpawnable, i == _selectedIndex);
                 else
-                    DrawRow(x, rowY + (i * RowHeight), items[i], GetItemValue(i), i == _selectedIndex);
+                    DrawRow(x, rowRect.y, items[i], GetItemValue(i), i == _selectedIndex);
             }
+
+            HandleMouseWheel();
 
             var footerRect = new Rect(x, bodyRect.y + (items.Length * RowHeight), MenuWidth, FooterHeight);
             GUI.DrawTexture(footerRect, _footerTexture);
@@ -260,16 +297,46 @@ namespace CVRTrainer
             GUI.Label(labelRect, label, selected ? _selectedRowStyle : _rowStyle);
 
             var inputRect = new Rect(x + 68f, y + 4f, MenuWidth - 80f, RowHeight - 8f);
-            GUI.SetNextControlName(rename ? "CVRTrainerRenameInput" : "CVRTrainerGuidInput");
-            if (rename)
-                _renameInput = GUI.TextField(inputRect, _renameInput, 64, _textFieldStyle);
-            else
-                _guidInput = GUI.TextField(inputRect, _guidInput, 64, _textFieldStyle);
+            if (_textFieldActive)
+            {
+                string controlName = rename ? "CVRTrainerRenameInput" : "CVRTrainerGuidInput";
+                HandleTextEntryEvent();
+                GUI.SetNextControlName(controlName);
+                if (rename)
+                    _renameInput = GUI.TextField(inputRect, _renameInput, 64, _textFieldStyle);
+                else
+                    _guidInput = GUI.TextField(inputRect, _guidInput, 64, _textFieldStyle);
 
-            if (selected && _textFieldActive)
-                GUI.FocusControl(rename ? "CVRTrainerRenameInput" : "CVRTrainerGuidInput");
-            else if (selected)
-                GUIUtility.keyboardControl = 0;
+                if (_textFieldFocusPending)
+                {
+                    GUI.FocusControl(controlName);
+                    _textFieldFocusPending = false;
+                }
+            }
+            else
+            {
+                GUI.Label(inputRect, rename ? _renameInput : _guidInput, _textFieldStyle);
+            }
+        }
+
+        void HandleTextEntryEvent()
+        {
+            Event evt = Event.current;
+            if (evt == null || evt.type != EventType.KeyDown)
+                return;
+
+            if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter || evt.keyCode == KeyCode.Keypad5)
+            {
+                EndTextEntry();
+                _selectedIndex = 1;
+                ActivateSelected();
+                evt.Use();
+            }
+            else if (evt.keyCode == KeyCode.Escape || evt.keyCode == KeyCode.Keypad0)
+            {
+                EndTextEntry();
+                evt.Use();
+            }
         }
 
         void DrawRow(float x, float y, string label, string value, bool selected)
@@ -287,10 +354,68 @@ namespace CVRTrainer
             GUI.Label(valueRect, value, selected ? _selectedValueStyle : _valueStyle);
         }
 
+        void HandleMouseRow(Rect rowRect, int index)
+        {
+            Event evt = Event.current;
+            if (evt == null)
+                return;
+
+            Vector2 mousePos = evt.mousePosition;
+            if (!rowRect.Contains(mousePos))
+                return;
+
+            if (_selectedIndex != index)
+            {
+                _selectedIndex = index;
+                PlayNavigateSound();
+            }
+
+            if (evt.type == EventType.MouseDown && evt.button == 0)
+            {
+                if ((IsAddPage() || _page == MenuPage.RenameSpawnable) && index == 0)
+                    BeginTextEntry();
+                else
+                    ActivateSelected();
+
+                evt.Use();
+            }
+        }
+
+        void HandleMouseWheel()
+        {
+            Event evt = Event.current;
+            if (evt == null || evt.type != EventType.ScrollWheel || !_lastMenuRect.Contains(evt.mousePosition))
+                return;
+
+            if (Mathf.Abs(evt.delta.y) <= 0.01f)
+                return;
+
+            int direction = evt.delta.y > 0f ? 1 : -1;
+            if (_page == MenuPage.VehicleSpawner && _selectedIndex == 1)
+            {
+                SetActiveIndex(GetActiveIndex() + direction);
+                PlayNavigateSound();
+            }
+            else if (_page == MenuPage.VehicleSpawner && _selectedIndex == 0)
+            {
+                _spawnableFolder = (SpawnableFolder)Wrap((int)_spawnableFolder + direction, SpawnableFolderCount);
+                PlayNavigateSound();
+            }
+            else
+                MoveSelection(direction);
+
+            evt.Use();
+        }
+
         void MoveSelection(int direction)
         {
             int count = GetCurrentItems().Length;
-            _selectedIndex = (_selectedIndex + direction + count) % count;
+            int next = (_selectedIndex + direction + count) % count;
+            if (next != _selectedIndex)
+            {
+                _selectedIndex = next;
+                PlayNavigateSound();
+            }
         }
 
         void AdjustOption(int direction)
@@ -298,9 +423,100 @@ namespace CVRTrainer
             if (_page == MenuPage.VehicleSpawner)
             {
                 if (_selectedIndex == 0)
-                    _spawnableFolder = (SpawnableFolder)Wrap((int)_spawnableFolder + direction, 4);
+                {
+                    _spawnableFolder = (SpawnableFolder)Wrap((int)_spawnableFolder + direction, SpawnableFolderCount);
+                    PlayNavigateSound();
+                }
                 else if (_selectedIndex == 1)
+                {
                     SetActiveIndex(GetActiveIndex() + direction);
+                    PlayNavigateSound();
+                }
+            }
+        }
+
+        void PlayNavigateSound()
+        {
+            if (_audioSource == null || _navigateClip == null)
+                return;
+
+            if (Time.unscaledTime - _lastSoundTime < 0.035f)
+                return;
+
+            _lastSoundTime = Time.unscaledTime;
+            _audioSource.PlayOneShot(_navigateClip);
+        }
+
+        static AudioClip LoadEmbeddedWav(string resourceName)
+        {
+            Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+            if (stream == null)
+                return null;
+
+            using (stream)
+            using (var reader = new BinaryReader(stream))
+            {
+                if (new string(reader.ReadChars(4)) != "RIFF")
+                    return null;
+
+                reader.ReadInt32();
+                if (new string(reader.ReadChars(4)) != "WAVE")
+                    return null;
+
+                int channels = 0;
+                int sampleRate = 0;
+                short bitsPerSample = 0;
+                byte[] data = null;
+
+                while (reader.BaseStream.Position + 8 <= reader.BaseStream.Length)
+                {
+                    string chunkId = new string(reader.ReadChars(4));
+                    int chunkSize = reader.ReadInt32();
+                    long nextChunk = reader.BaseStream.Position + chunkSize;
+
+                    if (chunkId == "fmt ")
+                    {
+                        short audioFormat = reader.ReadInt16();
+                        channels = reader.ReadInt16();
+                        sampleRate = reader.ReadInt32();
+                        reader.ReadInt32();
+                        reader.ReadInt16();
+                        bitsPerSample = reader.ReadInt16();
+
+                        if (audioFormat != 1)
+                            return null;
+                    }
+                    else if (chunkId == "data")
+                    {
+                        data = reader.ReadBytes(chunkSize);
+                    }
+
+                    reader.BaseStream.Position = nextChunk + (chunkSize % 2);
+                }
+
+                if (data == null || channels <= 0 || sampleRate <= 0)
+                    return null;
+
+                if (bitsPerSample != 8 && bitsPerSample != 16)
+                    return null;
+
+                int sampleCount = data.Length / (bitsPerSample / 8);
+                float[] samples = new float[sampleCount];
+
+                if (bitsPerSample == 16)
+                {
+                    for (int i = 0; i < sampleCount; i++)
+                        samples[i] = System.BitConverter.ToInt16(data, i * 2) / 32768f;
+                }
+                else if (bitsPerSample == 8)
+                {
+                    for (int i = 0; i < sampleCount; i++)
+                        samples[i] = (data[i] - 128) / 128f;
+                }
+
+                AudioClip clip = AudioClip.Create("CVRTrainerMenuNavigate", sampleCount / channels, channels, sampleRate, false);
+                clip.SetData(samples, 0);
+                return clip;
             }
         }
 
@@ -308,14 +524,7 @@ namespace CVRTrainer
         {
             if (_page == MenuPage.Main)
             {
-                if (_selectedIndex == 0)
-                    OpenPage(MenuPage.Player);
-                else if (_selectedIndex == 1)
-                    OpenPage(MenuPage.World);
-                else if (_selectedIndex == 2)
-                    OpenPage(MenuPage.VehicleSpawner);
-                else if (_selectedIndex == 3)
-                    OpenPage(MenuPage.PropSpawner);
+                ActivateMainItem();
                 return;
             }
 
@@ -331,6 +540,28 @@ namespace CVRTrainer
                 ActivateAddItem();
             else if (_page == MenuPage.RenameSpawnable)
                 ActivateRenameItem();
+        }
+
+        void ActivateMainItem()
+        {
+            switch (_selectedIndex)
+            {
+                case 0:
+                    OpenPage(MenuPage.Player);
+                    break;
+                case 1:
+                    OpenPage(MenuPage.World);
+                    break;
+                case 2:
+                    OpenPage(MenuPage.VehicleSpawner);
+                    break;
+                case 3:
+                    OpenPage(MenuPage.PropSpawner);
+                    break;
+                case 4:
+                    CloseMenu();
+                    break;
+            }
         }
 
         void ActivatePlayerItem()
@@ -580,8 +811,7 @@ namespace CVRTrainer
         void CloseMenuForGameControls(string status)
         {
             SetStatus(status);
-            _isOpen = false;
-            SetGameInputLocked(false);
+            CloseMenu();
         }
 
         void SpawnActiveSelected()
@@ -677,7 +907,22 @@ namespace CVRTrainer
 
         void MoveActiveEntry(int direction)
         {
+            List<SavedContentEntry> list = GetActiveList();
             int index = GetActiveIndex();
+            int target = index + direction;
+
+            if (list.Count == 0)
+            {
+                SetStatus("No entry to move");
+                return;
+            }
+
+            if (target < 0 || target >= list.Count)
+            {
+                SetStatus(direction < 0 ? "Already at top" : "Already at bottom");
+                return;
+            }
+
             switch (_spawnableFolder)
             {
                 case SpawnableFolder.Vehicles:
@@ -694,7 +939,7 @@ namespace CVRTrainer
                     return;
             }
 
-            SetActiveIndex(index + direction);
+            SetActiveIndex(target);
             SetStatus(direction < 0 ? "Moved up" : "Moved down");
         }
 
@@ -742,7 +987,14 @@ namespace CVRTrainer
 
         void RemoveActiveEntry()
         {
+            List<SavedContentEntry> list = GetActiveList();
             int index = GetActiveIndex();
+            if (list.Count == 0)
+            {
+                SetStatus("No entry to remove");
+                return;
+            }
+
             switch (_spawnableFolder)
             {
                 case SpawnableFolder.Vehicles:
@@ -759,7 +1011,7 @@ namespace CVRTrainer
                     break;
             }
 
-            SetActiveIndex(index);
+            ClampActiveIndex(index);
             SetStatus("Removed entry");
         }
 
@@ -819,6 +1071,27 @@ namespace CVRTrainer
             }
         }
 
+        void ClampActiveIndex(int value)
+        {
+            int count = GetActiveList().Count;
+            int index = count == 0 ? 0 : Mathf.Clamp(value, 0, count - 1);
+            switch (_spawnableFolder)
+            {
+                case SpawnableFolder.Props:
+                    _propIndex = index;
+                    break;
+                case SpawnableFolder.Favorites:
+                    _favoriteIndex = index;
+                    break;
+                case SpawnableFolder.Recent:
+                    _recentIndex = index;
+                    break;
+                default:
+                    _vehicleIndex = index;
+                    break;
+            }
+        }
+
         void SaveActiveEntry(SavedContentEntry entry)
         {
             switch (_spawnableFolder)
@@ -841,6 +1114,9 @@ namespace CVRTrainer
         static HashSet<string> GetOwnPropInstances(string guid)
         {
             var instances = new HashSet<string>();
+            if (MetaPort.Instance == null)
+                return instances;
+
             for (int i = 0; i < CVRSyncHelper.Props.Count; i++)
             {
                 CVRSyncHelper.PropData prop = CVRSyncHelper.Props[i];
@@ -856,6 +1132,9 @@ namespace CVRTrainer
 
         static string FindNewestOwnPropInstance(string guid, HashSet<string> existingInstances)
         {
+            if (MetaPort.Instance == null)
+                return string.Empty;
+
             for (int i = CVRSyncHelper.Props.Count - 1; i >= 0; i--)
             {
                 CVRSyncHelper.PropData prop = CVRSyncHelper.Props[i];
@@ -910,50 +1189,6 @@ namespace CVRTrainer
             _guidInput = string.Empty;
             SetStatus("Saved GUID, resolving details");
             StartCoroutine(ResolveEntry(list[index], vehicle));
-        }
-
-        void ResolveSelected(bool vehicle)
-        {
-            SavedContentEntry entry = vehicle
-                ? GetSelectedEntry(Settings.Vehicles, _vehicleIndex)
-                : GetSelectedEntry(Settings.Props, _propIndex);
-
-            if (entry == null)
-            {
-                SetStatus(vehicle ? "Add a vehicle GUID first" : "Add a prop GUID first");
-                return;
-            }
-
-            SetStatus("Resolving " + Settings.ShortGuid(entry.Guid));
-            StartCoroutine(ResolveEntry(entry, vehicle));
-        }
-
-        void RemoveSelected(bool vehicle)
-        {
-            if (vehicle)
-            {
-                if (Settings.Vehicles.Count == 0)
-                {
-                    SetStatus("No saved vehicle to remove");
-                    return;
-                }
-
-                Settings.RemoveVehicle(_vehicleIndex);
-                _vehicleIndex = Mathf.Clamp(_vehicleIndex, 0, Mathf.Max(0, Settings.Vehicles.Count - 1));
-                SetStatus("Removed saved vehicle");
-            }
-            else
-            {
-                if (Settings.Props.Count == 0)
-                {
-                    SetStatus("No saved prop to remove");
-                    return;
-                }
-
-                Settings.RemoveProp(_propIndex);
-                _propIndex = Mathf.Clamp(_propIndex, 0, Mathf.Max(0, Settings.Props.Count - 1));
-                SetStatus("Removed saved prop");
-            }
         }
 
         IEnumerator ResolveSavedEntries()
@@ -1036,8 +1271,7 @@ namespace CVRTrainer
         {
             if (_page == MenuPage.Main)
             {
-                _isOpen = false;
-                SetGameInputLocked(false);
+                CloseMenu();
                 return;
             }
 
@@ -1055,7 +1289,7 @@ namespace CVRTrainer
         {
             _page = page;
             _selectedIndex = 0;
-            _textFieldActive = false;
+            EndTextEntry();
             if (IsAddPage())
                 _guidInput = string.Empty;
             SetStatus("Ready");
@@ -1194,7 +1428,7 @@ namespace CVRTrainer
                 return entry.Status + author + " | " + Settings.ShortGuid(entry.Guid);
             }
 
-            return "F4 open/close   arrows/8/2 move   Enter/5 select   Backspace/0 back";
+            return "F4 open/close   8/2 or arrows move   4/6 change   5/Enter select   0/O back";
         }
 
         void SetStatus(string message)
@@ -1203,33 +1437,95 @@ namespace CVRTrainer
             _statusUntil = Time.unscaledTime + 2.2f;
         }
 
+        void BeginTextEntry()
+        {
+            _textFieldActive = true;
+            _textFieldFocusPending = true;
+        }
+
+        void EndTextEntry()
+        {
+            _textFieldActive = false;
+            _textFieldFocusPending = false;
+            GUI.FocusControl(null);
+        }
+
+        void SetMenuOpen(bool open)
+        {
+            _isOpen = open;
+            SetGameInputLocked(open);
+
+            ResetTransientMenuState();
+
+            if (open)
+                SetStatus("Ready");
+        }
+
+        void ResetTransientMenuState()
+        {
+            _page = MenuPage.Main;
+            _selectedIndex = 0;
+            _guidInput = string.Empty;
+            _renameInput = string.Empty;
+            _lastMenuRect = default(Rect);
+            EndTextEntry();
+        }
+
+        void CloseMenu()
+        {
+            if (!_isOpen)
+                return;
+
+            _isOpen = false;
+            SetGameInputLocked(false);
+            ResetTransientMenuState();
+        }
+
         void SetGameInputLocked(bool locked)
         {
-            var inputManager = CVRInputManager.Instance;
-            if (inputManager == null)
+            if (_gameInputLocked == locked)
                 return;
+
+            _gameInputLocked = locked;
+            CVRInputManager._moduleKeyboard.InputLock.SetLock(InputLockId, locked);
+            CVRInputManager._moduleMouse.InputLock.SetLock(InputLockId, locked);
+            CVRInputManager._moduleGamepad.InputLock.SetLock(InputLockId, locked);
 
             if (locked)
-            {
-                if (!_ownsInputLock)
-                {
-                    _previousInputEnabled = inputManager.inputEnabled;
-                    _ownsInputLock = true;
-                }
+                ClearGameInputState();
+        }
 
-                inputManager.inputEnabled = false;
-                inputManager.movementVector = Vector3.zero;
-                inputManager.rawLookVector = Vector3.zero;
-                inputManager.sprint = false;
-                inputManager.toggleFlight = false;
-                return;
-            }
-
-            if (!_ownsInputLock)
+        static void ClearGameInputState()
+        {
+            var input = CVRInputManager.Instance;
+            if (input == null)
                 return;
 
-            inputManager.inputEnabled = _previousInputEnabled;
-            _ownsInputLock = false;
+            input.movementVector = Vector3.zero;
+            input.lookVector = Vector2.zero;
+            input.rawLookVector = Vector2.zero;
+            input.jump = false;
+            input.sprint = false;
+            input.crouchToggle = false;
+            input.proneToggle = false;
+            input.floatDirection = 0f;
+            input.rollDirection = 0f;
+            input.mainMenuButton = false;
+            input.quickMenuButton = false;
+            input.interactLeftDown = false;
+            input.interactLeftUp = false;
+            input.interactRightDown = false;
+            input.interactRightUp = false;
+            input.drop = false;
+            input.toggleFlight = false;
+            input.reload = false;
+            input.switchMode = false;
+            input.unlockMouse = false;
+            input.accelerate = 0f;
+            input.brake = 0f;
+            input.steering = 0f;
+            input.handBrake = 0f;
+            input.boost = 0f;
         }
 
         void CreateStyles()
