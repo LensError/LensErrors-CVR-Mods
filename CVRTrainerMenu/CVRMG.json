@@ -1,0 +1,27 @@
+{
+  "_id": -1,
+  "name": "CVR Trainer",
+  "modversion": "0.1.0",
+  "gameversion": "2026r181",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "GTA V trainer style menu for ChilloutVR. Press F4 to toggle",
+  "searchtags": [
+    "trainer",
+    "menu",
+    "overlay",
+    "player",
+    "flight",
+    "noclip",
+    "vehicle",
+    "prop",
+    "spawner",
+    "fun"
+  ],
+  "requirements": [],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/CVRTrainer.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods",
+  "changelog": "",
+  "embedcolor": "#F2C94C"
+}
