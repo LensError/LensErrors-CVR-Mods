@@ -3,6 +3,7 @@ using ABI_RC.Core;
 using ABI_RC.Core.Base;
 using ABI_RC.Core.IO;
 using ABI_RC.Core.Networking.IO.Instancing;
+using ABI_RC.Core.Networking.IO.UserGeneratedContent;
 using ABI_RC.Core.Networking.API.Responses.DetailsV2;
 using ABI_RC.Core.Player;
 using ABI_RC.Core.Savior;
@@ -29,8 +30,6 @@ namespace CVRTrainer
             World,
             VehicleSpawner,
             PropSpawner,
-            AddVehicle,
-            AddProp,
             RenameSpawnable
         }
 
@@ -52,6 +51,7 @@ namespace CVRTrainer
         const int SpawnableFolderCount = 4;
         const string NavigateSoundResource = "CVRTrainer.609576__cjspellsfish__oldvgmenu.wav";
         const string InputLockId = "CVRTrainerMenu";
+        static readonly FieldInfo PropDetailsField = typeof(ViewManager).GetField("_propDetails", BindingFlags.Instance | BindingFlags.NonPublic);
 
         static readonly string[] MainItems = {
             "Player",
@@ -67,7 +67,6 @@ namespace CVRTrainer
             "Teleport Saved",
             "Flight",
             "Noclip",
-            "Clip Flight",
             "Back"
         };
 
@@ -83,7 +82,7 @@ namespace CVRTrainer
         static readonly string[] VehicleItems = {
             "Folder",
             "Spawnable",
-            "Add GUID",
+            "Add Current",
             "Paste GUID",
             "Resolve Selected",
             "Select To Spawn",
@@ -101,14 +100,6 @@ namespace CVRTrainer
             "Delete All My Props",
             "Delete All Props (Local)",
             "Prop Delete Mode",
-            "Clear Prop Mode",
-            "Back"
-        };
-
-        static readonly string[] AddItems = {
-            "GUID",
-            "Save",
-            "Paste Clipboard",
             "Back"
         };
 
@@ -132,7 +123,6 @@ namespace CVRTrainer
         bool _hasSavedPosition;
         string _lastVehicleInstanceId = string.Empty;
         string _lastPropInstanceId = string.Empty;
-        string _guidInput = string.Empty;
         string _renameInput = string.Empty;
         bool _textFieldActive;
         bool _textFieldFocusPending;
@@ -231,7 +221,7 @@ namespace CVRTrainer
                 AdjustOption(1);
             else if (Pressed(KeyCode.Return, KeyCode.KeypadEnter, KeyCode.Keypad5, KeyCode.U))
             {
-                bool isTextRow = (IsAddPage() || _page == MenuPage.RenameSpawnable) && _selectedIndex == 0;
+                bool isTextRow = _page == MenuPage.RenameSpawnable && _selectedIndex == 0;
                 if (isTextRow)
                     BeginTextEntry();
                 else
@@ -275,8 +265,8 @@ namespace CVRTrainer
                 var rowRect = new Rect(x, rowY + (i * RowHeight), MenuWidth, RowHeight);
                 HandleMouseRow(rowRect, i);
 
-                if ((IsAddPage() || _page == MenuPage.RenameSpawnable) && i == 0)
-                    DrawTextInputRow(x, rowRect.y, items[i], _page == MenuPage.RenameSpawnable, i == _selectedIndex);
+                if (_page == MenuPage.RenameSpawnable && i == 0)
+                    DrawTextInputRow(x, rowRect.y, items[i], i == _selectedIndex);
                 else
                     DrawRow(x, rowRect.y, items[i], GetItemValue(i), i == _selectedIndex);
             }
@@ -288,7 +278,7 @@ namespace CVRTrainer
             GUI.Label(footerRect, GetFooterText(), _footerStyle);
         }
 
-        void DrawTextInputRow(float x, float y, string label, bool rename, bool selected)
+        void DrawTextInputRow(float x, float y, string label, bool selected)
         {
             var rowRect = new Rect(x, y, MenuWidth, RowHeight);
             GUI.DrawTexture(rowRect, selected ? _selectedTexture : _rowTexture);
@@ -299,13 +289,10 @@ namespace CVRTrainer
             var inputRect = new Rect(x + 68f, y + 4f, MenuWidth - 80f, RowHeight - 8f);
             if (_textFieldActive)
             {
-                string controlName = rename ? "CVRTrainerRenameInput" : "CVRTrainerGuidInput";
+                string controlName = "CVRTrainerRenameInput";
                 HandleTextEntryEvent();
                 GUI.SetNextControlName(controlName);
-                if (rename)
-                    _renameInput = GUI.TextField(inputRect, _renameInput, 64, _textFieldStyle);
-                else
-                    _guidInput = GUI.TextField(inputRect, _guidInput, 64, _textFieldStyle);
+                _renameInput = GUI.TextField(inputRect, _renameInput, 64, _textFieldStyle);
 
                 if (_textFieldFocusPending)
                 {
@@ -315,7 +302,7 @@ namespace CVRTrainer
             }
             else
             {
-                GUI.Label(inputRect, rename ? _renameInput : _guidInput, _textFieldStyle);
+                GUI.Label(inputRect, _renameInput, _textFieldStyle);
             }
         }
 
@@ -372,7 +359,7 @@ namespace CVRTrainer
 
             if (evt.type == EventType.MouseDown && evt.button == 0)
             {
-                if ((IsAddPage() || _page == MenuPage.RenameSpawnable) && index == 0)
+                if (_page == MenuPage.RenameSpawnable && index == 0)
                     BeginTextEntry();
                 else
                     ActivateSelected();
@@ -536,8 +523,6 @@ namespace CVRTrainer
                 ActivateVehicleItem();
             else if (_page == MenuPage.PropSpawner)
                 ActivatePropItem();
-            else if (IsAddPage())
-                ActivateAddItem();
             else if (_page == MenuPage.RenameSpawnable)
                 ActivateRenameItem();
         }
@@ -595,19 +580,15 @@ namespace CVRTrainer
                         SetStatus("Player controller not ready");
                         return;
                     }
+                    if (!controller.IsFlying())
+                    {
+                        SetStatus("Turn Flight on first");
+                        return;
+                    }
                     controller.ToggleFlightNoClip();
                     SetStatus("Noclip " + OnOff(controller.IsFlyingNoClipEnabled()));
                     break;
                 case 5:
-                    controller = BetterBetterCharacterController.Instance;
-                    if (controller == null)
-                    {
-                        SetStatus("Player controller not ready");
-                        return;
-                    }
-                    EnableClipFlight(controller);
-                    break;
-                case 6:
                     Back();
                     break;
             }
@@ -681,19 +662,6 @@ namespace CVRTrainer
             }
         }
 
-        void EnableClipFlight(BetterBetterCharacterController controller)
-        {
-            if (controller.IsFlyingNoClipEnabled())
-                controller.ToggleFlightNoClip();
-
-            if (!controller.IsFlying())
-                controller.ToggleFlight();
-
-            SetStatus(controller.IsFlying() && !controller.IsFlyingNoClipEnabled()
-                ? "Clip Flight ON"
-                : "Clip Flight unavailable");
-        }
-
         void ActivateVehicleItem()
         {
             switch (_selectedIndex)
@@ -705,7 +673,7 @@ namespace CVRTrainer
                     AdjustOption(1);
                     break;
                 case 2:
-                    OpenAddForCurrentFolder();
+                    AddCurrentViewedSpawnable();
                     break;
                 case 3:
                     AddGuidFromClipboard(IsVehicleFolder());
@@ -765,22 +733,9 @@ namespace CVRTrainer
                     CloseMenuForGameControls("Prop delete mode");
                     break;
                 case 3:
-                    if (PlayerSetup.Instance != null)
-                        PlayerSetup.Instance.ClearPropToSpawn();
-                    SetStatus("Prop mode cleared");
-                    break;
-                case 4:
                     Back();
                     break;
             }
-        }
-
-        void OpenAddForCurrentFolder()
-        {
-            if (_spawnableFolder == SpawnableFolder.Props)
-                OpenPage(MenuPage.AddProp);
-            else
-                OpenPage(MenuPage.AddVehicle);
         }
 
         bool IsVehicleFolder()
@@ -1148,35 +1103,58 @@ namespace CVRTrainer
             return string.Empty;
         }
 
-        void ActivateAddItem()
+        void AddCurrentViewedSpawnable()
         {
-            switch (_selectedIndex)
+            if (!CanAddToActiveFolder())
             {
-                case 1:
-                    AddGuid(_page == MenuPage.AddVehicle, _guidInput);
-                    break;
-                case 2:
-                    _guidInput = GUIUtility.systemCopyBuffer;
-                    AddGuid(_page == MenuPage.AddVehicle, _guidInput);
-                    break;
-                case 3:
-                    Back();
-                    break;
+                SetStatus("Select Vehicles or Props folder first");
+                return;
             }
+
+            SpawnableDetail_t details = GetCurrentSpawnableDetails();
+            if (details == null || string.IsNullOrEmpty(Settings.NormalizeGuid(details.SpawnableId)))
+            {
+                SetStatus("Open spawnable details in CVR first");
+                return;
+            }
+
+            bool vehicle = _spawnableFolder == SpawnableFolder.Vehicles;
+            SavedContentEntry entry = AddGuid(vehicle, details.SpawnableId);
+            if (entry == null)
+                return;
+
+            ApplySpawnableDetail(entry, details);
+            SaveResolvedEntry(entry, vehicle);
+            SetStatus("Added " + entry.DisplayName);
+        }
+
+        static SpawnableDetail_t GetCurrentSpawnableDetails()
+        {
+            var viewManager = ViewManager.Instance;
+            if (viewManager == null || PropDetailsField == null)
+                return null;
+
+            return PropDetailsField.GetValue(viewManager) as SpawnableDetail_t;
         }
 
         void AddGuidFromClipboard(bool vehicle)
         {
+            if (!CanAddToActiveFolder())
+            {
+                SetStatus("Select Vehicles or Props folder first");
+                return;
+            }
+
             AddGuid(vehicle, GUIUtility.systemCopyBuffer);
         }
 
-        void AddGuid(bool vehicle, string rawGuid)
+        SavedContentEntry AddGuid(bool vehicle, string rawGuid)
         {
             bool added = vehicle ? Settings.AddVehicle(rawGuid) : Settings.AddProp(rawGuid);
             if (!added)
             {
                 SetStatus("Invalid or duplicate GUID");
-                return;
+                return null;
             }
 
             List<SavedContentEntry> list = vehicle ? Settings.Vehicles : Settings.Props;
@@ -1186,9 +1164,23 @@ namespace CVRTrainer
             else
                 _propIndex = index;
 
-            _guidInput = string.Empty;
             SetStatus("Saved GUID, resolving details");
             StartCoroutine(ResolveEntry(list[index], vehicle));
+            return list[index];
+        }
+
+        bool CanAddToActiveFolder()
+        {
+            return _spawnableFolder == SpawnableFolder.Vehicles || _spawnableFolder == SpawnableFolder.Props;
+        }
+
+        static void ApplySpawnableDetail(SavedContentEntry entry, SpawnableDetail_t details)
+        {
+            entry.Name = string.IsNullOrEmpty(details.SpawnableName) ? Settings.ShortGuid(entry.Guid) : details.SpawnableName;
+            entry.Author = details.AuthorName ?? string.Empty;
+            entry.IsPermitted = details.IsSpawnPermitted;
+            entry.IsPublic = details.IsPublic;
+            entry.Status = details.IsSpawnPermitted ? "Ready" : "Not permitted";
         }
 
         IEnumerator ResolveSavedEntries()
@@ -1277,10 +1269,6 @@ namespace CVRTrainer
 
             if (_page == MenuPage.RenameSpawnable)
                 OpenPage(MenuPage.VehicleSpawner);
-            else if (_page == MenuPage.AddVehicle)
-                OpenPage(MenuPage.VehicleSpawner);
-            else if (_page == MenuPage.AddProp)
-                OpenPage(MenuPage.PropSpawner);
             else
                 OpenPage(MenuPage.Main);
         }
@@ -1290,8 +1278,6 @@ namespace CVRTrainer
             _page = page;
             _selectedIndex = 0;
             EndTextEntry();
-            if (IsAddPage())
-                _guidInput = string.Empty;
             SetStatus("Ready");
         }
 
@@ -1307,9 +1293,6 @@ namespace CVRTrainer
                     return VehicleItems;
                 case MenuPage.PropSpawner:
                     return PropItems;
-                case MenuPage.AddVehicle:
-                case MenuPage.AddProp:
-                    return AddItems;
                 case MenuPage.RenameSpawnable:
                     return RenameItems;
                 default:
@@ -1329,9 +1312,6 @@ namespace CVRTrainer
                     return "VEHICLE SPAWNER";
                 case MenuPage.PropSpawner:
                     return "PROPS";
-                case MenuPage.AddVehicle:
-                case MenuPage.AddProp:
-                    return "ADD SPAWNABLE GUID";
                 case MenuPage.RenameSpawnable:
                     return "RENAME LABEL";
                 default:
@@ -1358,9 +1338,10 @@ namespace CVRTrainer
                     case 3:
                         return controller == null ? "N/A" : OnOff(controller.IsFlying());
                     case 4:
-                        return controller == null ? "N/A" : OnOff(controller.IsFlyingNoClipEnabled());
-                    case 5:
-                        return controller == null ? "N/A" : OnOff(controller.IsFlying() && !controller.IsFlyingNoClipEnabled());
+                        if (controller == null)
+                            return "N/A";
+
+                        return controller.IsFlying() ? OnOff(controller.IsFlyingNoClipEnabled()) : "Needs flight";
                 }
             }
             else if (_page == MenuPage.World)
@@ -1385,8 +1366,9 @@ namespace CVRTrainer
                     case 1:
                         return entry == null ? "< none >" : "< " + entry.DisplayName + " >";
                     case 2:
+                        return CanAddToActiveFolder() ? string.Empty : "Use base folder";
                     case 3:
-                        return (_spawnableFolder == SpawnableFolder.Favorites || _spawnableFolder == SpawnableFolder.Recent) ? "Use base folder" : string.Empty;
+                        return CanAddToActiveFolder() ? "Clipboard" : "Use base folder";
                     case 4:
                     case 5:
                     case 6:
@@ -1399,17 +1381,6 @@ namespace CVRTrainer
                         return entry == null ? "No GUID" : string.Empty;
                 }
             }
-            else if (IsAddPage())
-            {
-                switch (index)
-                {
-                    case 1:
-                        return string.IsNullOrEmpty(Settings.NormalizeGuid(_guidInput)) ? "Needs GUID" : "Ready";
-                    case 2:
-                        return "Clipboard";
-                }
-            }
-
             return string.Empty;
         }
 
@@ -1465,7 +1436,6 @@ namespace CVRTrainer
         {
             _page = MenuPage.Main;
             _selectedIndex = 0;
-            _guidInput = string.Empty;
             _renameInput = string.Empty;
             _lastMenuRect = default(Rect);
             EndTextEntry();
@@ -1590,11 +1560,6 @@ namespace CVRTrainer
                 fontSize = 12,
                 normal = { textColor = Color.white }
             };
-        }
-
-        bool IsAddPage()
-        {
-            return _page == MenuPage.AddVehicle || _page == MenuPage.AddProp;
         }
 
         static SavedContentEntry GetSelectedEntry(List<SavedContentEntry> list, int index)

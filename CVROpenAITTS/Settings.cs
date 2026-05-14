@@ -16,10 +16,17 @@ namespace CVROPENAI
 
         static MelonPreferences_Entry<int>    ms_backend     = null!;
         static MelonPreferences_Entry<string> ms_baseUrl     = null!;
+        static MelonPreferences_Entry<string> ms_customBaseUrl = null!;
         static MelonPreferences_Entry<string> ms_apiKey      = null!;
         static MelonPreferences_Entry<string> ms_model       = null!;
         static MelonPreferences_Entry<int>    ms_langIdx     = null!;
         static MelonPreferences_Entry<int>    ms_voiceIdx    = null!;
+        static MelonPreferences_Entry<int>    ms_kokoroLangIdx = null!;
+        static MelonPreferences_Entry<int>    ms_morpheusLangIdx = null!;
+        static MelonPreferences_Entry<int>    ms_kokoroVoiceIdx = null!;
+        static MelonPreferences_Entry<int>    ms_morpheusVoiceIdx = null!;
+        static MelonPreferences_Entry<int>    ms_openAIVoiceIdx = null!;
+        static MelonPreferences_Entry<int>    ms_customVoiceIdx = null!;
         static MelonPreferences_Entry<string> ms_customVoice = null!;
         static MelonPreferences_Entry<float>  ms_speed       = null!;
 
@@ -29,10 +36,17 @@ namespace CVROPENAI
 
             ms_backend     = cat.CreateEntry("Backend",     0,                       "Backend",      "TTS provider: 0=Kokoro, 1=Morpheus, 2=OpenAI, 3=Custom");
             ms_baseUrl     = cat.CreateEntry("BaseUrl",     "http://localhost:8880",  "Base URL",     "Server base URL (auto-filled when you pick a backend)");
+            ms_customBaseUrl = cat.CreateEntry("CustomBaseUrl", ms_baseUrl.Value,     "CustomBaseUrl", "Saved base URL for the custom backend");
             ms_apiKey      = cat.CreateEntry("ApiKey",      "",                       "API Key",      "Bearer token — required for OpenAI, leave blank for local servers");
             ms_model       = cat.CreateEntry("Model",       "kokoro",                 "Model",        "Model name sent in the request (auto-filled when you pick a backend)");
             ms_langIdx     = cat.CreateEntry("LangIdx",     0,                        "LangIdx",      "Selected language group index");
             ms_voiceIdx    = cat.CreateEntry("VoiceIdx",    0,                        "VoiceIdx",     "Selected voice index within the language group");
+            ms_kokoroLangIdx = cat.CreateEntry("KokoroLangIdx", ms_langIdx.Value,      "KokoroLangIdx", "Selected Kokoro language group index");
+            ms_morpheusLangIdx = cat.CreateEntry("MorpheusLangIdx", ms_langIdx.Value,  "MorpheusLangIdx", "Selected Morpheus language group index");
+            ms_kokoroVoiceIdx = cat.CreateEntry("KokoroVoiceIdx", ms_voiceIdx.Value,   "KokoroVoiceIdx", "Selected Kokoro voice index");
+            ms_morpheusVoiceIdx = cat.CreateEntry("MorpheusVoiceIdx", ms_voiceIdx.Value, "MorpheusVoiceIdx", "Selected Morpheus voice index");
+            ms_openAIVoiceIdx = cat.CreateEntry("OpenAIVoiceIdx", ms_voiceIdx.Value,   "OpenAIVoiceIdx", "Selected OpenAI voice index");
+            ms_customVoiceIdx = cat.CreateEntry("CustomVoiceIdx", ms_voiceIdx.Value,   "CustomVoiceIdx", "Selected custom backend voice index");
             ms_customVoice = cat.CreateEntry("CustomVoice", "",                       "Custom Voice", "Voice name override — takes priority over preset when non-empty");
             ms_speed       = cat.CreateEntry("Speed",       1.0f,                     "Speed",        "Speech speed (0.25 – 4.0)");
 
@@ -55,9 +69,8 @@ namespace CVROPENAI
 
             backendSel.OnOptionUpdated += i =>
             {
+                SaveCurrentBackendSettings();
                 ms_backend.Value  = i;
-                ms_langIdx.Value  = 0;
-                ms_voiceIdx.Value = 0;
                 switch ((Backend)i)
                 {
                     case Backend.Kokoro:
@@ -72,7 +85,9 @@ namespace CVROPENAI
                         ms_baseUrl.Value = "https://api.openai.com";
                         ms_model.Value   = "tts-1";
                         break;
-                    // Custom: leave whatever the user has
+                    case Backend.Custom:
+                        ms_baseUrl.Value = ms_customBaseUrl.Value;
+                        break;
                 }
             };
 
@@ -97,12 +112,15 @@ namespace CVROPENAI
                         Backend.Morpheus => MorpheusVoices.Languages,
                         _                => new[] { "Not applicable — use Custom Voice" },
                     };
-                    int clampedIdx = Math.Clamp(ms_langIdx.Value, 0, langs.Length - 1);
+                    int clampedIdx = Math.Clamp(GetCurrentLanguageIndex(), 0, langs.Length - 1);
                     var langSel = new MultiSelection("Language", langs, clampedIdx);
                     langSel.OnOptionUpdated += i =>
                     {
-                        ms_langIdx.Value  = i;
-                        ms_voiceIdx.Value = 0;
+                        if (backend == Backend.Kokoro || backend == Backend.Morpheus)
+                        {
+                            SetCurrentLanguageIndex(i);
+                            SetCurrentVoiceIndex(0);
+                        }
                     };
                     QuickMenuAPI.OpenMultiSelect(langSel);
                 };
@@ -113,11 +131,11 @@ namespace CVROPENAI
                 {
                     Backend backend  = CurrentBackend;
                     string[] voices  = GetVoiceList(backend);
-                    int clampedIdx   = Math.Clamp(ms_voiceIdx.Value, 0, voices.Length - 1);
+                    int clampedIdx   = Math.Clamp(GetCurrentVoiceIndex(), 0, voices.Length - 1);
                     var voiceSel     = new MultiSelection("Voice", voices, clampedIdx);
                     voiceSel.OnOptionUpdated += i =>
                     {
-                        ms_voiceIdx.Value    = i;
+                        SetCurrentVoiceIndex(i);
                         ms_customVoice.Value = "";
                     };
                     QuickMenuAPI.OpenMultiSelect(voiceSel);
@@ -133,15 +151,77 @@ namespace CVROPENAI
         static Backend CurrentBackend =>
             (Backend)Math.Clamp(ms_backend?.Value ?? 0, 0, 3);
 
+        static void SaveCurrentBackendSettings()
+        {
+            if (CurrentBackend == Backend.Custom)
+                ms_customBaseUrl.Value = ms_baseUrl.Value;
+        }
+
+        static int GetCurrentLanguageIndex()
+        {
+            return CurrentBackend switch
+            {
+                Backend.Kokoro   => ms_kokoroLangIdx?.Value ?? ms_langIdx?.Value ?? 0,
+                Backend.Morpheus => ms_morpheusLangIdx?.Value ?? ms_langIdx?.Value ?? 0,
+                _                => ms_langIdx?.Value ?? 0,
+            };
+        }
+
+        static void SetCurrentLanguageIndex(int value)
+        {
+            ms_langIdx.Value = value;
+            switch (CurrentBackend)
+            {
+                case Backend.Kokoro:
+                    ms_kokoroLangIdx.Value = value;
+                    break;
+                case Backend.Morpheus:
+                    ms_morpheusLangIdx.Value = value;
+                    break;
+            }
+        }
+
+        static int GetCurrentVoiceIndex()
+        {
+            return CurrentBackend switch
+            {
+                Backend.Kokoro   => ms_kokoroVoiceIdx?.Value ?? ms_voiceIdx?.Value ?? 0,
+                Backend.Morpheus => ms_morpheusVoiceIdx?.Value ?? ms_voiceIdx?.Value ?? 0,
+                Backend.OpenAI   => ms_openAIVoiceIdx?.Value ?? ms_voiceIdx?.Value ?? 0,
+                Backend.Custom   => ms_customVoiceIdx?.Value ?? ms_voiceIdx?.Value ?? 0,
+                _                => ms_voiceIdx?.Value ?? 0,
+            };
+        }
+
+        static void SetCurrentVoiceIndex(int value)
+        {
+            ms_voiceIdx.Value = value;
+            switch (CurrentBackend)
+            {
+                case Backend.Kokoro:
+                    ms_kokoroVoiceIdx.Value = value;
+                    break;
+                case Backend.Morpheus:
+                    ms_morpheusVoiceIdx.Value = value;
+                    break;
+                case Backend.OpenAI:
+                    ms_openAIVoiceIdx.Value = value;
+                    break;
+                case Backend.Custom:
+                    ms_customVoiceIdx.Value = value;
+                    break;
+            }
+        }
+
         static string[] GetVoiceList(Backend backend)
         {
             switch (backend)
             {
                 case Backend.Kokoro:
-                    int kLang = Math.Clamp(ms_langIdx?.Value ?? 0, 0, KokoroVoices.VoicesByLanguage.Length - 1);
+                    int kLang = Math.Clamp(GetCurrentLanguageIndex(), 0, KokoroVoices.VoicesByLanguage.Length - 1);
                     return KokoroVoices.VoicesByLanguage[kLang];
                 case Backend.Morpheus:
-                    int mLang = Math.Clamp(ms_langIdx?.Value ?? 0, 0, MorpheusVoices.VoicesByLanguage.Length - 1);
+                    int mLang = Math.Clamp(GetCurrentLanguageIndex(), 0, MorpheusVoices.VoicesByLanguage.Length - 1);
                     return MorpheusVoices.VoicesByLanguage[mLang];
                 case Backend.OpenAI:
                     return OpenAIVoices.Presets;
@@ -162,8 +242,8 @@ namespace CVROPENAI
             if (!string.IsNullOrEmpty(custom)) return custom;
 
             Backend backend  = CurrentBackend;
-            int langIdx      = ms_langIdx?.Value  ?? 0;
-            int voiceIdx     = ms_voiceIdx?.Value ?? 0;
+            int langIdx      = GetCurrentLanguageIndex();
+            int voiceIdx     = GetCurrentVoiceIndex();
 
             switch (backend)
             {
