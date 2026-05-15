@@ -1,0 +1,26 @@
+{
+  "_id": -1,
+  "name": "Content Menu Tweaks",
+  "modversion": "0.1.0",
+  "gameversion": "2026r181",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "Adds local Recently Used, Recently Seen, Recently Spawned, and Recently Visited categories to ChilloutVR avatar, prop, and world menus, plus friend-joinable active instances on world details. Recent categories include local Clear buttons. UIExpansionKit can render settings toggles for each feature. Recent data is stored locally in MelonPreferences and does not create or modify CVR cloud categories.",
+  "searchtags": [
+    "avatars",
+    "props",
+    "worlds",
+    "recent",
+    "categories",
+    "instances",
+    "ui"
+  ],
+  "requirements": [
+    "[UIExpansionKit](https://github.com/ddakebono/ChilloutMods)"
+  ],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/ContentMenuTweaks.dll",
+  "sourcelink": "https://github.com/LensError/lenserrors-cvr-mods",
+  "changelog": "Initial release.",
+  "embedcolor": "#3AA0FF"
+}

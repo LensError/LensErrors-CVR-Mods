@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <Platforms>x64</Platforms>
+    <Version>0.1.0</Version>
+    <AssemblyName>ContentMenuTweaks</AssemblyName>
+    <RootNamespace>ContentMenuTweaks</RootNamespace>
+    <FailOnCVRDeployError>false</FailOnCVRDeployError>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(CVRPath)/MelonLoader/net35/MelonLoader.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(CVRPath)/MelonLoader/net35/0Harmony.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="cohtml.Net">
+      <HintPath>$(CVRPath)/ChilloutVR_Data/Managed/cohtml.Net.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="Cohtml.Runtime">
+      <HintPath>$(CVRPath)/ChilloutVR_Data/Managed/Cohtml.Runtime.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(CVRPath)/ChilloutVR_Data/Managed/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Condition="'$(FailOnCVRDeployError)' == 'true'" Command="copy /y &quot;$(TargetPath)&quot; &quot;$(CVRPath)/Mods/&quot;" />
+    <Exec Condition="'$(FailOnCVRDeployError)' != 'true'" Command="copy /y &quot;$(TargetPath)&quot; &quot;$(CVRPath)/Mods/&quot;" IgnoreExitCode="true" />
+  </Target>
+</Project>
