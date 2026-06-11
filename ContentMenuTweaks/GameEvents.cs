@@ -1,6 +1,7 @@
 using ABI.CCK.Components;
 using ABI_RC.Core.InteractionSystem;
 using ABI_RC.Core.Player;
+using ABI_RC.Core.PropManagement;
 using ABI_RC.Core.Networking.IO.Instancing;
 using ABI_RC.Core.Networking.IO.UserGeneratedContent;
 using ABI_RC.Core.Savior;
@@ -103,7 +104,7 @@ namespace ContentMenuTweaks
             }
         }
 
-        static void OnPropSpawned(string _, CVRSyncHelper.PropData prop)
+        static void OnPropSpawned(string _, PropSoul prop)
         {
             try
             {

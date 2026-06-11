@@ -16,9 +16,7 @@
     "kokoro",
     "chat"
   ],
-  "requirements": [
-    "[BTKUILib](https://github.com/BTK-Development/BTKUILib)"
-  ],
+  "requirements": [],
   "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/CVROpenAITTS.dll",
   "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods",
   "changelog": "Initial release",

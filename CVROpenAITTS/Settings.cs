@@ -1,18 +1,21 @@
 using System;
-using BTKUILib;
-using BTKUILib.UIObjects;
-using BTKUILib.UIObjects.Components;
-using BTKUILib.UIObjects.Objects;
+using ABI_RC.Systems.UI.UILib;
+using ABI_RC.Systems.UI.UILib.UIObjects;
+using ABI_RC.Systems.UI.UILib.UIObjects.Components;
+using ABI_RC.Systems.UI.UILib.UIObjects.Objects;
 using MelonLoader;
 
 namespace CVROPENAI
 {
-    enum Backend { Kokoro = 0, Morpheus = 1, OpenAI = 2, Custom = 3 }
+    enum Backend { Kokoro = 0, Morpheus = 1, OpenAI = 2, F5FastAPI = 3, Custom = 4 }
 
     static class Settings
     {
         const string CategoryId   = "CVROpenAITTS";
         const string CategoryName = "CVR AI Voice TTS";
+        const string SharedQuickMenuModName = "LensErrorsMods";
+        const string SharedQuickMenuPageName = "Main";
+        const string SharedQuickMenuIconName = "lens_errors_mods";
 
         static MelonPreferences_Entry<int>    ms_backend     = null!;
         static MelonPreferences_Entry<string> ms_baseUrl     = null!;
@@ -34,7 +37,7 @@ namespace CVROPENAI
         {
             var cat = MelonPreferences.CreateCategory(CategoryId, CategoryName);
 
-            ms_backend     = cat.CreateEntry("Backend",     0,                       "Backend",      "TTS provider: 0=Kokoro, 1=Morpheus, 2=OpenAI, 3=Custom");
+            ms_backend     = cat.CreateEntry("Backend",     0,                       "Backend",      "TTS provider: 0=Kokoro, 1=Morpheus, 2=OpenAI, 3=F5 FastAPI, 4=Custom");
             ms_baseUrl     = cat.CreateEntry("BaseUrl",     "http://localhost:8880",  "Base URL",     "Server base URL (auto-filled when you pick a backend)");
             ms_customBaseUrl = cat.CreateEntry("CustomBaseUrl", ms_baseUrl.Value,     "CustomBaseUrl", "Saved base URL for the custom backend");
             ms_apiKey      = cat.CreateEntry("ApiKey",      "",                       "API Key",      "Bearer token — required for OpenAI, leave blank for local servers");
@@ -55,7 +58,20 @@ namespace CVROPENAI
 
         static void BuildUI()
         {
-            var page = new Page(CategoryId, "Main", isRootPage: true, tabIcon: "voice_chat");
+            var sharedPage = Page.GetOrCreatePage(
+                SharedQuickMenuModName,
+                SharedQuickMenuPageName,
+                isRootPage: true,
+                tabIcon: SharedQuickMenuIconName);
+            sharedPage.MenuTitle = "LensError's Mods";
+            sharedPage.MenuSubtitle = "Installed mod settings and actions";
+
+            var category = sharedPage.AddCategory(CategoryName);
+            var page = category.AddPage(
+                "Settings",
+                "voice_chat",
+                "Configure TTS provider and voice",
+                CategoryId);
             page.MenuTitle    = "AI Voice TTS";
             page.MenuSubtitle = "Configure TTS provider and voice";
 
@@ -64,8 +80,8 @@ namespace CVROPENAI
 
             var backendSel = new MultiSelection(
                 "Backend",
-                new[] { "Kokoro (local)", "Morpheus (local)", "OpenAI", "Custom" },
-                Math.Clamp(ms_backend.Value, 0, 3));
+                new[] { "Kokoro (local)", "Morpheus (local)", "OpenAI", "F5 FastAPI", "Custom" },
+                Math.Clamp(ms_backend.Value, 0, 4));
 
             backendSel.OnOptionUpdated += i =>
             {
@@ -85,6 +101,10 @@ namespace CVROPENAI
                         ms_baseUrl.Value = "https://api.openai.com";
                         ms_model.Value   = "tts-1";
                         break;
+                    case Backend.F5FastAPI:
+                        ms_baseUrl.Value = "http://localhost:8000";
+                        ms_model.Value   = "f5-tts";
+                        break;
                     case Backend.Custom:
                         ms_baseUrl.Value = ms_customBaseUrl.Value;
                         break;
@@ -94,9 +114,9 @@ namespace CVROPENAI
             provCat.AddButton("Backend", "", "Select TTS provider — auto-fills URL and model", ButtonStyle.TextOnly)
                 .OnPress += () => QuickMenuAPI.OpenMultiSelect(backendSel);
 
-            provCat.AddMelonStringInput(ms_baseUrl);
-            provCat.AddMelonStringInput(ms_apiKey);
-            provCat.AddMelonStringInput(ms_model);
+            AddPreferenceTextInput(provCat, ms_baseUrl, "Base URL");
+            AddPreferenceTextInput(provCat, ms_apiKey, "API Key", InputType.Password);
+            AddPreferenceTextInput(provCat, ms_model, "Model");
 
             // --- Voice ---
             var voiceCat = page.AddCategory("Voice");
@@ -141,15 +161,34 @@ namespace CVROPENAI
                     QuickMenuAPI.OpenMultiSelect(voiceSel);
                 };
 
-            voiceCat.AddMelonStringInput(ms_customVoice);
+            AddPreferenceTextInput(voiceCat, ms_customVoice, "Custom Voice");
 
             // --- Audio ---
             var audioCat = page.AddCategory("Audio");
-            audioCat.AddMelonSlider(ms_speed, 0.25f, 4.0f, decimalPlaces: 2, allowReset: true);
+            audioCat.AddSlider(
+                    "Speed",
+                    "Speech speed",
+                    ms_speed.Value,
+                    0.25f,
+                    4.0f,
+                    2,
+                    1.0f,
+                    true)
+                .OnValueUpdated += value => ms_speed.Value = value;
+        }
+
+        static void AddPreferenceTextInput(
+            Category category,
+            MelonPreferences_Entry<string> entry,
+            string placeholder,
+            InputType inputType = InputType.Text)
+        {
+            var input = category.AddTextInput(entry.Value, placeholder, inputType);
+            input.OnTextUpdate += value => entry.Value = value ?? "";
         }
 
         static Backend CurrentBackend =>
-            (Backend)Math.Clamp(ms_backend?.Value ?? 0, 0, 3);
+            (Backend)Math.Clamp(ms_backend?.Value ?? 0, 0, 4);
 
         static void SaveCurrentBackendSettings()
         {
@@ -225,6 +264,8 @@ namespace CVROPENAI
                     return MorpheusVoices.VoicesByLanguage[mLang];
                 case Backend.OpenAI:
                     return OpenAIVoices.Presets;
+                case Backend.F5FastAPI:
+                    return new[] { "Set Custom Voice field below" };
                 default:
                     return new[] { "Set Custom Voice field below" };
             }
@@ -235,6 +276,7 @@ namespace CVROPENAI
         public static string GetApiKey()  => ms_apiKey?.Value  ?? "";
         public static string GetModel()   => ms_model?.Value   ?? "kokoro";
         public static float  GetSpeed()   => ms_speed?.Value   ?? 1.0f;
+        public static bool   IsF5FastAPI() => CurrentBackend == Backend.F5FastAPI;
 
         public static string GetVoice()
         {
@@ -257,6 +299,8 @@ namespace CVROPENAI
                     return mv[Math.Clamp(voiceIdx, 0, mv.Length - 1)];
                 case Backend.OpenAI:
                     return OpenAIVoices.Presets[Math.Clamp(voiceIdx, 0, OpenAIVoices.Presets.Length - 1)];
+                case Backend.F5FastAPI:
+                    return "";
                 default:
                     return "";
             }
