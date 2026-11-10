@@ -14,9 +14,7 @@
     "encounters",
     "tracking"
   ],
-  "requirements": [
-    "[BTKUILib](https://github.com/BTK-Development/BTKUILib)"
-  ],
+  "requirements": [],
   "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll",
   "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/PlayerHistory",
   "changelog": "Initial release",

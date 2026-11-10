@@ -1,7 +1,8 @@
+using ABI_RC.Core.InteractionSystem;
 using ABI_RC.Core.Networking.IO.Social;
-using BTKUILib;
-using BTKUILib.UIObjects;
-using BTKUILib.UIObjects.Components;
+using ABI_RC.Systems.UI.UILib;
+using ABI_RC.Systems.UI.UILib.UIObjects;
+using ABI_RC.Systems.UI.UILib.UIObjects.Components;
 using MelonLoader;
 using System;
 using System.Linq;
@@ -47,7 +48,11 @@ namespace PlayerHistory
                 .OnPress += OnClearAllHeld;
 
             ms_playerListCat = page.AddCategory("History", false);
-            page.OnPageOpen += RefreshPlayerList;
+            page.OnVisibilityChanged += (visible, _) =>
+            {
+                if (visible)
+                    RefreshPlayerList();
+            };
 
             var detailNavCat = page.AddCategory("DetailNav", false);
             ms_detailPage = detailNavCat.AddPage("Detail", "", "", "PlayerHistory");
@@ -58,8 +63,8 @@ namespace PlayerHistory
             detailActionCat.AddButton("Open Player Details", "", "Open this player's CVR profile page")
                 .OnPress += () =>
                 {
-                    if (ms_detailUserId != null)
-                        ABI_RC.Core.InteractionSystem.ViewManager.Instance.RequestUserDetailsPage(ms_detailUserId);
+                    if (ms_detailUserId != null && ViewManager.Instance != null)
+                        ViewManager.Instance.RequestUserDetailsPage(ms_detailUserId);
                 };
 
             ms_encounterCat = ms_detailPage.AddCategory("Encounters", false);

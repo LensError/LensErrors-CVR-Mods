@@ -58,21 +58,18 @@ namespace Bunnyhop
         {
             JumpMultiplier = Mathf.Clamp(value, 1f, 2f);
             s_jumpMultiplierEntry.Value = JumpMultiplier;
-            MelonPreferences.Save();
         }
 
         internal static void SetMaxSpeedMultiplier(float value)
         {
             MaxSpeedMultiplier = Mathf.Clamp(value, 1f, 10f);
             s_maxSpeedMultiplierEntry.Value = MaxSpeedMultiplier;
-            MelonPreferences.Save();
         }
 
         internal static void SetGroundResetDelay(float value)
         {
             GroundResetDelay = Mathf.Clamp(value, 0.1f, 3f);
             s_groundResetDelayEntry.Value = GroundResetDelay;
-            MelonPreferences.Save();
         }
 
         internal static void SetCurrentAvatarId(string avatarId)

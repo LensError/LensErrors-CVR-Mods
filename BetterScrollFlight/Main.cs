@@ -12,7 +12,7 @@ namespace BetterScrollFlight
         public override void OnLateInitializeMelon()
         {
             Settings.Init();
-            MelonLoader.MelonCoroutines.Start(WaitForRootLogic());
+            MelonCoroutines.Start(WaitForRootLogic());
         }
 
         public override void OnDeinitializeMelon()

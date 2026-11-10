@@ -129,6 +129,20 @@ namespace PlayerHistory
 
         internal static void Clear() => Entries.Clear();
 
-        static void EvictOldest() => Entries.Remove(Entries.OrderBy(e => e.LastSeen).First());
+        static void EvictOldest()
+        {
+            if (Entries.Count == 0) return;
+            int oldestIndex = 0;
+            DateTime oldestTime = Entries[0].LastSeen;
+            for (int i = 1; i < Entries.Count; i++)
+            {
+                if (Entries[i].LastSeen < oldestTime)
+                {
+                    oldestTime = Entries[i].LastSeen;
+                    oldestIndex = i;
+                }
+            }
+            Entries.RemoveAt(oldestIndex);
+        }
     }
 }

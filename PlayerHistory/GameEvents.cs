@@ -17,7 +17,8 @@ namespace PlayerHistory
         {
             try
             {
-                HistoryData.AddOrUpdate(entity.Uuid, entity.Username, MetaPort.Instance.CurrentWorldName);
+                string worldName = MetaPort.Instance != null ? MetaPort.Instance.CurrentWorldName : string.Empty;
+                HistoryData.AddOrUpdate(entity.Uuid, entity.Username, worldName);
                 HistoryData.Save();
             }
             catch (Exception ex)

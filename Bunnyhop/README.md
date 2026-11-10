@@ -1,20 +1,13 @@
 # Bunnyhop
 
-Bunnyhop increases the local player's horizontal speed when jumps are chained
-without staying on the ground. It preserves CVR's normal jump height and clamps
-the boost relative to the current world's movement speed.
+Increases horizontal movement speed when jumps are chained before staying grounded. Preserves default jump height and clamps speed relative to current world limits.
 
+## Controls & Settings
 
-## Settings
+Configured under the `LensError's Mods` Quick Menu page:
 
-Settings are available under the shared `LensError's Mods` Quick Menu page:
-
-- **Enabled**: Enables bunnyhop speed boosts.
-- **Disable For Current Avatar**: Persistently disables Bunnyhop whenever the
-  currently worn avatar is active.
-- **Speed Per Jump**: Horizontal speed multiplier applied per chained jump.
-- **Maximum Speed**: Maximum multiple of CVR's world-adjusted movement speed.
-- **Reset Delay**: Time spent grounded before the jump chain resets.
-
-All settings and per-avatar exclusions are saved between sessions using
-MelonPreferences.
+- **Enabled**: Toggle bunnyhop boosts.
+- **Disable For Current Avatar**: Exclude the active avatar from bunnyhop boosts.
+- **Speed Per Jump**: Multiplier added per chained jump (1.0x - 2.0x).
+- **Maximum Speed**: Ceiling multiplier relative to world speed (1.0x - 10.0x).
+- **Reset Delay**: Grounded duration before chain resets (0.1s - 3.0s).
