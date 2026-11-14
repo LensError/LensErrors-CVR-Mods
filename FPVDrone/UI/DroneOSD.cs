@@ -120,7 +120,10 @@ namespace FPVDrone
                     ? DroneProfileStore.CustomNameDraft.Trim().ToUpper()
                     : $"{Settings.FrameWheelbaseMm.Value:F0}MM {Settings.PropDiameterInches.Value:F1}\" {Settings.BatteryCells.Value}S";
                 string signalBars = GetSignalBars(vtx.LinkQualityPercent);
-                string vtxHeader = $"VTX: R8 5880MHz  PWR: {Settings.VtxPowerMw.Value:F0}mW  [{buildLabel}]\n" +
+                string vtxBandInfo = Settings.VtxType.Value == VtxSystem.Digital
+                    ? $"DIGITAL {vtx.DigitalBitrateMbps:F1}Mbps"
+                    : "ANALOG R8 5880MHz";
+                string vtxHeader = $"VTX: {vtxBandInfo}  PWR: {Settings.VtxPowerMw.Value:F0}mW  [{buildLabel}]\n" +
                                    $"RSSI: {vtx.RssiDbm:F0}dBm  LQ: {vtx.LinkQualityPercent}%  {signalBars}  |  RC: {input.ActiveDeviceName} [{Settings.ControlStickMode.Value}]";
                 GUI.Label(new Rect(35f, 30f, 700f, 50f), vtxHeader, _osdStyle);
             }
@@ -341,22 +344,96 @@ namespace FPVDrone
 
         private void DrawVtxStatic(float w, float h, float intensity, bool signalLost)
         {
+            if (Settings.VtxType.Value == VtxSystem.Digital)
+            {
+                DrawDigitalVtxArtifacts(w, h, intensity, signalLost);
+                return;
+            }
+
             UpdateStaticTexture(intensity);
 
             GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(intensity * 0.85f));
             GUI.DrawTexture(new Rect(0, 0, w, h), _staticNoiseTexture, ScaleMode.StretchToFill);
 
-            // Procedural analog tear line
-            float tearY = (Time.time * 650f) % h;
-            float tearHeight = UnityEngine.Random.Range(10f, 40f) * intensity;
-            GUI.color = new Color(0.8f, 0.8f, 0.8f, intensity * 0.9f);
-            GUI.DrawTexture(new Rect(0, tearY, w, tearHeight), _pixelTexture);
+            // Procedural analog tear line (only when interference rises above baseline RF floor)
+            if (intensity > 0.08f)
+            {
+                float tearY = (Time.time * 650f) % h;
+                float tearHeight = UnityEngine.Random.Range(10f, 40f) * intensity;
+                GUI.color = new Color(0.8f, 0.8f, 0.8f, intensity * 0.9f);
+                GUI.DrawTexture(new Rect(0, tearY, w, tearHeight), _pixelTexture);
+            }
 
             if (signalLost)
             {
                 GUI.color = Color.red;
                 GUI.Label(new Rect((w - 200f) * 0.5f, (h - 40f) * 0.5f, 200f, 40f), "NO SIGNAL", _warningStyle);
             }
+        }
+
+        private void DrawDigitalVtxArtifacts(float w, float h, float intensity, bool signalLost)
+        {
+            if (signalLost)
+            {
+                GUI.color = new Color(0.03f, 0.04f, 0.06f, 0.82f);
+                GUI.DrawTexture(new Rect(0, 0, w, h), _pixelTexture);
+            }
+
+            // Hold macroblock pattern for ~80ms bursts (12 Hz) like real H.265 P-frame corruption
+            uint seed = (uint)(Mathf.FloorToInt(Time.time * 12f) * 747796405 + 2891336453);
+            const float cellSize = 32f;
+            int cols = Mathf.Max(1, Mathf.FloorToInt(w / cellSize));
+            int rows = Mathf.Max(1, Mathf.FloorToInt(h / cellSize));
+            int blockCount = Mathf.RoundToInt(Mathf.Lerp(4f, 60f, intensity));
+
+            for (int i = 0; i < blockCount; i++)
+            {
+                int cx = (int)(NextRand01(ref seed) * cols);
+                int cy = (int)(NextRand01(ref seed) * rows);
+                int spanW = NextRand01(ref seed) > 0.65f ? 2 : 1;
+                int spanH = NextRand01(ref seed) > 0.80f ? 2 : 1;
+
+                float colorPick = NextRand01(ref seed);
+                float alpha = Mathf.Clamp01((0.18f + intensity * 0.55f) * (0.5f + 0.5f * NextRand01(ref seed)));
+
+                if (colorPick < 0.45f)
+                    GUI.color = new Color(0.05f, 0.06f, 0.08f, alpha); // Dropped dark macroblock
+                else if (colorPick < 0.72f)
+                    GUI.color = new Color(0.75f, 0.82f, 0.88f, alpha * 0.65f); // Quantized luma block
+                else if (colorPick < 0.87f)
+                    GUI.color = new Color(0.12f, 0.85f, 0.32f, alpha * 0.55f); // YUV green chroma glitch
+                else
+                    GUI.color = new Color(0.85f, 0.18f, 0.72f, alpha * 0.55f); // YUV magenta chroma glitch
+
+                GUI.DrawTexture(new Rect(cx * cellSize, cy * cellSize, spanW * cellSize, spanH * cellSize), _pixelTexture);
+            }
+
+            // Horizontal slice corruption bands under moderate/heavy packet loss
+            if (intensity > 0.25f)
+            {
+                int sliceCount = intensity > 0.65f ? 3 : 1;
+                for (int s = 0; s < sliceCount; s++)
+                {
+                    float sliceY = NextRand01(ref seed) * h;
+                    float sliceH = 4f + NextRand01(ref seed) * 14f;
+                    float sliceX = NextRand01(ref seed) * (w * 0.35f);
+                    float sliceW = w * (0.4f + 0.6f * NextRand01(ref seed));
+                    GUI.color = new Color(0.25f, 0.32f, 0.35f, Mathf.Clamp01(intensity * 0.55f));
+                    GUI.DrawTexture(new Rect(sliceX, sliceY, sliceW, sliceH), _pixelTexture);
+                }
+            }
+
+            if (signalLost)
+            {
+                GUI.color = Color.red;
+                GUI.Label(new Rect((w - 200f) * 0.5f, (h - 40f) * 0.5f, 200f, 40f), "LINK LOST", _warningStyle);
+            }
+        }
+
+        private static float NextRand01(ref uint state)
+        {
+            state = state * 1664525u + 1013904223u;
+            return (state & 0x00FFFFFFu) / 16777216.0f;
         }
 
         private void UpdateStaticTexture(float intensity)

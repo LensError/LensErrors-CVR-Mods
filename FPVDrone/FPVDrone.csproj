@@ -24,6 +24,7 @@
     <Reference Include="UnityEngine.XRModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.XRModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
     <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
     <Reference Include="Unity.InputSystem"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/Unity.InputSystem.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="SteamAudioUnity"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/SteamAudioUnity.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
     <Reference Include="Assembly-CSharp"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/Assembly-CSharp.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
   </ItemGroup>
   <ItemGroup>

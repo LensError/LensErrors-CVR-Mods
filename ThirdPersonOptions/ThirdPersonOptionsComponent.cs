@@ -465,30 +465,56 @@ namespace ThirdPersonOptions
         if (oldBlock)
             oldBlock.parentNode.removeChild(oldBlock);
 
+        var anchor = document.getElementById('ScrollToToggleThirdPerson');
+        var anchorBg = anchor ? anchor.closest('.settings-background') : null;
+        var anchorRow = anchor ? anchor.closest('.row-wrapper') : null;
+        var isGs2 = !!(anchorBg && anchorBg.parentNode === category);
+
         var block = document.createElement('div');
         block.id = 'tpo-native-settings';
+        if (isGs2) {
+            block.className = 'settings-background';
+            block.setAttribute('platform-specific', 'pc');
+
+            var subcat = document.createElement('div');
+            subcat.className = 'settings-subcategory';
+            var subcatName = document.createElement('div');
+            subcatName.className = 'subcategory-name';
+            subcatName.textContent = 'Third Person Options';
+            subcat.appendChild(subcatName);
+            block.appendChild(subcat);
+        }
 
         var ctrlT = makeToggle('TPOCtrlTToggle', settingsData.ctrlTToggle);
         var middleClickZoom = makeToggle('TPOMiddleClickZoom', settingsData.middleClickZoom);
         var cameraPosition = makeDropdown('TPOCameraPosition', settingsData.cameraPosition, '0:Back,1:Left,2:Right,3:Front');
         var modifier = makeDropdown('TPOModifierKey', settingsData.modifierKey, '0:Left Ctrl,1:Right Ctrl,2:Left Shift,3:Right Shift,4:Left Alt,5:Right Alt,6:F,7:G,8:T,9:None');
 
+        function makeDivider() {
+            var divider = document.createElement('div');
+            divider.className = 'row-divider';
+            return divider;
+        }
+
         block.appendChild(makeRow(
             makeCaption('Ctrl+T Toggle', 'Toggles third person while normal gameplay input is active'),
             makeInput(ctrlT)));
+        if (isGs2) block.appendChild(makeDivider());
         block.appendChild(makeRow(
             makeCaption('3P Middle Click Zoom', 'Middle click from third person to zoom in, then middle click again to restore the previous third-person distance'),
             makeInput(middleClickZoom)));
+        if (isGs2) block.appendChild(makeDivider());
         block.appendChild(makeRow(
             makeCaption('3P Camera Position', 'Selects a back, left, right, or front-facing third-person camera'),
             makeInput(cameraPosition)));
+        if (isGs2) block.appendChild(makeDivider());
         block.appendChild(makeRow(
             makeCaption('3P Scroll Modifier', 'Key required for Scroll To Toggle 3P. Set to None to use the native behavior.'),
             makeInput(modifier)));
 
-        var anchor = document.getElementById('ScrollToToggleThirdPerson');
-        var anchorRow = anchor ? anchor.closest('.row-wrapper') : null;
-        if (anchorRow && anchorRow.parentNode === category)
+        if (isGs2)
+            category.insertBefore(block, anchorBg.nextSibling);
+        else if (anchorRow && anchorRow.parentNode === category)
             category.insertBefore(block, anchorRow.nextSibling);
         else
             category.appendChild(block);

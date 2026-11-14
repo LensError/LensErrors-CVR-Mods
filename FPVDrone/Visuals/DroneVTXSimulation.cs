@@ -9,6 +9,7 @@ namespace FPVDrone
         public float StaticIntensity01 { get; private set; } = 0.0f;
         public bool IsSignalLost { get; private set; } = false;
         public float VoltageFlickerFactor { get; private set; } = 1.0f;
+        public float DigitalBitrateMbps { get; private set; } = 50.0f;
 
         private float _noiseOffset = 0.0f;
         // Layer mask excludes UI (5), PlayerLocal (8), PlayerClone (9), UIInternal (15)
@@ -29,8 +30,8 @@ namespace FPVDrone
             float powerMw = Mathf.Max(25.0f, Settings.VtxPowerMw.Value);
             float txPowerDbm = 10.0f * Mathf.Log10(powerMw);
 
-            // Free space path loss: calibrated so 800mW provides clean video out to 150m+ in open air
-            float pathLoss = 20.0f * Mathf.Log10(distance) + 40.0f;
+            // Free space path loss: calibrated so 25mW gets subtle static around ~40m and loses link near ~1km open air
+            float pathLoss = 20.0f * Mathf.Log10(distance) + 52.0f;
             float rawRssi = txPowerDbm - pathLoss;
 
             // 2. Multi-obstacle penetration attenuation with zero-allocation non-alloc raycast
@@ -65,8 +66,8 @@ namespace FPVDrone
                 }
             }
 
-            // Each solid wall drops signal by 5.5 dBm (capped at 32 dBm max occlusion loss)
-            float obstacleAttenuation = Mathf.Min(32.0f, obstacleCount * 5.5f);
+            // Each solid wall drops signal by 7.0 dBm (capped at 42 dBm max occlusion loss)
+            float obstacleAttenuation = Mathf.Min(42.0f, obstacleCount * 7.0f);
             float totalRssi = rawRssi - obstacleAttenuation;
 
             // Noise floor is around -105 dBm, strong signal is -35 dBm
@@ -76,40 +77,76 @@ namespace FPVDrone
             float normalizedSignal = Mathf.InverseLerp(-100.0f, -50.0f, RssiDbm);
             LinkQualityPercent = Mathf.RoundToInt(normalizedSignal * 100.0f);
 
-            // 3. Static Intensity (0.0 = clean video, 1.0 = total white static/snow)
+            // 3. Static / Digital Artifact Intensity (0.0 = clean video, 1.0 = total signal loss)
             if (!Settings.EnableVtxStatic.Value || Settings.VtxNoiseStrength.Value <= 0.001f)
             {
                 StaticIntensity01 = 0.0f;
                 IsSignalLost = false;
+                DigitalBitrateMbps = 50.0f;
             }
             else
             {
                 float noiseMult = Mathf.Clamp(Settings.VtxNoiseStrength.Value, 0.0f, 2.5f);
 
-                if (RssiDbm > -80.0f)
+                if (Settings.VtxType.Value == VtxSystem.Digital)
                 {
-                    StaticIntensity01 = 0.0f;
-                    IsSignalLost = false;
-                }
-                else if (RssiDbm > -92.0f)
-                {
-                    // Mild static / subtle horizontal noise bands
-                    float t = Mathf.InverseLerp(-80.0f, -92.0f, RssiDbm);
-                    StaticIntensity01 = Mathf.Clamp01(t * 0.28f * noiseMult);
-                    IsSignalLost = false;
-                }
-                else if (RssiDbm > -100.0f)
-                {
-                    // Moderate to heavy snow and analog scanlines
-                    float t = Mathf.InverseLerp(-92.0f, -100.0f, RssiDbm);
-                    StaticIntensity01 = Mathf.Clamp01((0.28f + t * 0.55f) * noiseMult);
-                    IsSignalLost = false;
+                    // Digital VTX stays clean longer, then degrades via bitrate drop and macroblocking
+                    if (RssiDbm > -80.0f)
+                    {
+                        float t = Mathf.InverseLerp(-65.0f, -80.0f, RssiDbm);
+                        DigitalBitrateMbps = Mathf.Lerp(50.0f, 25.0f, t);
+                        StaticIntensity01 = 0.0f;
+                        IsSignalLost = false;
+                    }
+                    else if (RssiDbm > -94.0f)
+                    {
+                        float t = Mathf.InverseLerp(-80.0f, -94.0f, RssiDbm);
+                        DigitalBitrateMbps = Mathf.Lerp(25.0f, 6.0f, t);
+                        StaticIntensity01 = Mathf.Clamp01(Mathf.Lerp(0.04f, 0.45f, t) * noiseMult);
+                        IsSignalLost = false;
+                    }
+                    else if (RssiDbm > -100.0f)
+                    {
+                        float t = Mathf.InverseLerp(-94.0f, -100.0f, RssiDbm);
+                        DigitalBitrateMbps = Mathf.Lerp(6.0f, 1.2f, t);
+                        StaticIntensity01 = Mathf.Clamp01(Mathf.Lerp(0.45f, 0.90f, t) * noiseMult);
+                        IsSignalLost = false;
+                    }
+                    else
+                    {
+                        DigitalBitrateMbps = 0.0f;
+                        StaticIntensity01 = Mathf.Clamp01(1.0f * noiseMult);
+                        IsSignalLost = true;
+                    }
                 }
                 else
                 {
-                    // Total signal loss / heavy snow
-                    StaticIntensity01 = Mathf.Clamp01(1.0f * noiseMult);
-                    IsSignalLost = true;
+                    // Analog VTX: subtle baseline RF grain even at close range, escalating to snow/tear
+                    const float baseFloor = 0.04f;
+                    DigitalBitrateMbps = 0.0f;
+
+                    if (RssiDbm > -70.0f)
+                    {
+                        StaticIntensity01 = Mathf.Clamp01(baseFloor * noiseMult);
+                        IsSignalLost = false;
+                    }
+                    else if (RssiDbm > -86.0f)
+                    {
+                        float t = Mathf.InverseLerp(-70.0f, -86.0f, RssiDbm);
+                        StaticIntensity01 = Mathf.Clamp01(Mathf.Lerp(baseFloor, 0.30f, t) * noiseMult);
+                        IsSignalLost = false;
+                    }
+                    else if (RssiDbm > -99.0f)
+                    {
+                        float t = Mathf.InverseLerp(-86.0f, -99.0f, RssiDbm);
+                        StaticIntensity01 = Mathf.Clamp01(Mathf.Lerp(0.30f, 0.85f, t) * noiseMult);
+                        IsSignalLost = false;
+                    }
+                    else
+                    {
+                        StaticIntensity01 = Mathf.Clamp01(1.0f * noiseMult);
+                        IsSignalLost = true;
+                    }
                 }
             }
 

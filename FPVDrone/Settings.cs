@@ -58,6 +58,12 @@ namespace FPVDrone
         Clip = 2
     }
 
+    public enum VtxSystem
+    {
+        Analog = 0,
+        Digital = 1
+    }
+
     public enum VrViewMode
     {
         Goggles2D = 0,
@@ -259,6 +265,7 @@ namespace FPVDrone
         public static MelonPreferences_Entry<VideoResolution> FpvCameraResolution;
         public static MelonPreferences_Entry<VrViewMode> VrView;
         public static MelonPreferences_Entry<bool> EnableVtxStatic;
+        public static MelonPreferences_Entry<VtxSystem> VtxType;
         public static MelonPreferences_Entry<float> VtxPowerMw;
         public static MelonPreferences_Entry<float> VtxNoiseStrength;
         public static MelonPreferences_Entry<bool> EnableVoltageSag;
@@ -418,7 +425,8 @@ namespace FPVDrone
             VrView = category.CreateEntry("VrView", VrViewMode.Goggles2D, "VR View Mode (Goggles2D or Stereo3D)");
 
             EnableVtxStatic = category.CreateEntry("EnableVtxStatic", true, "Simulate VTX RF Static and Snow");
-            VtxPowerMw = category.CreateEntry("VtxPowerMw", 800.0f, "VTX Output Power (mW)");
+            VtxType = category.CreateEntry("VtxType", VtxSystem.Analog, "VTX Video System (Analog or Digital)");
+            VtxPowerMw = category.CreateEntry("VtxPowerMw", 25.0f, "VTX Output Power (mW)");
             VtxNoiseStrength = category.CreateEntry("VtxNoiseStrength", 1.0f, "VTX Static Noise Intensity Multiplier");
             EnableVoltageSag = category.CreateEntry("EnableVoltageSag", true, "Simulate LiPo Voltage Sag Under Throttle");
 

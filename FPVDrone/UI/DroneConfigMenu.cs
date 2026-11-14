@@ -259,6 +259,8 @@ namespace FPVDrone
             Settings.VtxPowerMw.Value = powers[(cur + dir + powers.Length) % powers.Length];
         }
 
+        private static string VtxModeName(VtxSystem v) => v == VtxSystem.Digital ? "Digital (HD)" : "Analog (5.8G)";
+
         private static string FlightModeName(FlightMode m)
         {
             switch (m)
@@ -515,9 +517,10 @@ namespace FPVDrone
 
             var video = new ConfigTab { Name = "Video + Audio" };
             video.Rows.Add(Rows.Section("VTX"));
+            video.Rows.Add(Rows.Choice("VTX System", Settings.VtxType, VtxModeName, "Analog (5.8G snow/tear) or Digital (HD macroblocking/bitrate drop)."));
             video.Rows.Add(Rows.Choice("VTX Power", () => F0(Settings.VtxPowerMw.Value) + " mW", CycleVtxPower, "Output power steps: 25 / 200 / 800 / 1000 mW. Higher keeps the link clean at range."));
-            video.Rows.Add(Rows.Bool("RF Static", Settings.EnableVtxStatic, "Simulate analog snow and dropouts based on range and obstacles."));
-            video.Rows.Add(Rows.Float("Noise Amount", Settings.VtxNoiseStrength, 0.05f, 0.0f, 2.0f, Pct, "Static intensity multiplier.", () => Settings.EnableVtxStatic.Value));
+            video.Rows.Add(Rows.Bool("RF Static", Settings.EnableVtxStatic, "Simulate VTX signal degradation based on range and obstacles."));
+            video.Rows.Add(Rows.Float("Noise Amount", Settings.VtxNoiseStrength, 0.05f, 0.0f, 2.0f, Pct, "VTX artifact intensity multiplier.", () => Settings.EnableVtxStatic.Value));
             video.Rows.Add(Rows.Section("Camera"));
             video.Rows.Add(Rows.Float("Camera FOV", Settings.FpvCameraFov, 1f, 75f, 155f, Deg, "FPV lens field of view (wider shows more of the arms and props)."));
             video.Rows.Add(Rows.Bool("Frame in FPV View", Settings.ShowDroneMeshInFpv, "Render the 3D frame arms, ducts, and spinning props in FPV view.", "VISIBLE", "HIDDEN"));

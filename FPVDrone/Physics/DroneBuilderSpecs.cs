@@ -432,6 +432,14 @@ namespace FPVDrone
 
             float maxBpf = (maxLoadedRpm / 60f) * propBlades;
 
+            // Acoustic pickup distance derived from builder parts (tip speed, prop size, blade count, ducts)
+            float tipSpeedMps = Mathf.PI * propDiamM * (maxLoadedRpm / 60.0f);
+            float tipFactor = Mathf.Pow(Mathf.Clamp(tipSpeedMps / 210.0f, 0.20f, 2.0f), 0.55f);
+            float sizeFactor = Mathf.Pow(Mathf.Clamp(propDiamM / 0.12954f, 0.20f, 2.0f), 0.50f);
+            float bladeFactor = Mathf.Sqrt(propBlades / 3.0f);
+            float ductFactor = isDucted ? 0.80f : 1.0f;
+            float acousticScale = tipFactor * sizeFactor * bladeFactor * ductFactor;
+
             return new DroneHardwareSpec
             {
                 WheelbaseMm = wheelbaseMm,
@@ -477,8 +485,8 @@ namespace FPVDrone
                 IsEscLimited = isEscLimited,
                 IsUnderTorqued = isUnderTorqued,
                 MaxBladePassF0 = maxBpf,
-                AudioMinDistance = Mathf.Clamp(halfSpanM * 6.0f, 0.40f, 2.0f),
-                AudioMaxDistance = Mathf.Clamp(halfSpanM * 480.0f, 18.0f, 120.0f)
+                AudioMinDistance = Mathf.Clamp(2.8f * acousticScale, 1.0f, 4.5f),
+                AudioMaxDistance = Mathf.Clamp(150.0f * acousticScale, 28.0f, 220.0f)
             };
         }
     }

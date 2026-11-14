@@ -65,63 +65,67 @@ namespace FPVDrone
             _disarmBeepClip = GenerateToneSequenceClip("FPV_DisarmBeep", new[] { 2450f, 1650f }, 0.075f, 0.025f);
             _lowBattBeepClip = GenerateToneSequenceClip("FPV_LowBattBeep", new[] { 2950f, 2950f }, 0.060f, 0.045f);
 
-            // 1. 4-Motor Acoustic Array (3D Spatialized with spread and physical Doppler)
+            bool hasSteamAudioWorld = UnityEngine.Object.FindObjectOfType<SteamAudio.SteamAudioListener>() != null;
+
+            // 1. 4-Motor Acoustic Array (3D Spatialized with Steam Audio HRTF in supported worlds & physical Doppler)
             for (int i = 0; i < 4; i++)
             {
-                AudioSource src = _audioEmitterObject.AddComponent<AudioSource>();
-                src.clip = _bladePassClips[i];
-                src.loop = true;
-                src.spatialBlend = 1.0f;
-                src.dopplerLevel = 1.0f;
-                src.spread = 35.0f;
-                src.playOnAwake = false;
-                _motorSources[i] = src;
+                _motorSources[i] = CreateSpatialSource($"Motor_{i}", _bladePassClips[i], true, 35.0f, true, hasSteamAudioWorld);
             }
 
             // 2. High-Frequency Brushless Stator Commutation Layer
-            _statorWhineSource = _audioEmitterObject.AddComponent<AudioSource>();
-            _statorWhineSource.clip = _statorWhineClip;
-            _statorWhineSource.loop = true;
-            _statorWhineSource.spatialBlend = 1.0f;
-            _statorWhineSource.dopplerLevel = 1.0f;
-            _statorWhineSource.spread = 20.0f;
-            _statorWhineSource.playOnAwake = false;
+            _statorWhineSource = CreateSpatialSource("StatorWhine", _statorWhineClip, true, 20.0f, true, hasSteamAudioWorld);
 
             // 3. Propeller Inflow Wind and Slipstream Rush
-            _propWindAudioSource = _audioEmitterObject.AddComponent<AudioSource>();
-            _propWindAudioSource.clip = _propWindClip;
-            _propWindAudioSource.loop = true;
-            _propWindAudioSource.spatialBlend = 1.0f;
-            _propWindAudioSource.dopplerLevel = 1.0f;
-            _propWindAudioSource.spread = 60.0f;
-            _propWindAudioSource.playOnAwake = false;
+            _propWindAudioSource = CreateSpatialSource("PropWind", _propWindClip, true, 60.0f, true, hasSteamAudioWorld);
 
             // 4. Aerodynamic Prop Rip / Blade Stall Flutter
-            _bladeRipAudioSource = _audioEmitterObject.AddComponent<AudioSource>();
-            _bladeRipAudioSource.clip = _bladeRipClip;
-            _bladeRipAudioSource.loop = true;
-            _bladeRipAudioSource.spatialBlend = 1.0f;
-            _bladeRipAudioSource.dopplerLevel = 1.0f;
-            _bladeRipAudioSource.spread = 45.0f;
-            _bladeRipAudioSource.playOnAwake = false;
+            _bladeRipAudioSource = CreateSpatialSource("BladeRip", _bladeRipClip, true, 45.0f, true, hasSteamAudioWorld);
 
             // 5. ESC Beeper & BLHeli Initialization Chimes
-            _escBeepSource = _audioEmitterObject.AddComponent<AudioSource>();
-            _escBeepSource.clip = _escInitClip;
-            _escBeepSource.loop = false;
-            _escBeepSource.spatialBlend = 1.0f;
-            _escBeepSource.dopplerLevel = 1.0f;
-            _escBeepSource.playOnAwake = false;
+            _escBeepSource = CreateSpatialSource("EscBeep", _escInitClip, false, 0.0f, false, hasSteamAudioWorld);
 
             // 6. Prop Strike / Frame Collision Impacts
-            _impactAudioSource = _audioEmitterObject.AddComponent<AudioSource>();
-            _impactAudioSource.clip = _impactClip;
-            _impactAudioSource.loop = false;
-            _impactAudioSource.spatialBlend = 1.0f;
-            _impactAudioSource.dopplerLevel = 1.0f;
-            _impactAudioSource.playOnAwake = false;
+            _impactAudioSource = CreateSpatialSource("Impact", _impactClip, false, 0.0f, true, hasSteamAudioWorld);
 
             ApplyPresetRolloff(hw);
+        }
+
+        private AudioSource CreateSpatialSource(string childName, AudioClip clip, bool loop, float spread, bool enableOcclusion, bool useSteamAudio)
+        {
+            var child = new GameObject($"FPVAudio_{childName}");
+            child.transform.SetParent(_audioEmitterObject.transform, false);
+
+            AudioSource src = child.AddComponent<AudioSource>();
+            src.clip = clip;
+            src.loop = loop;
+            src.spatialBlend = 1.0f;
+            src.spatialize = useSteamAudio;
+            src.dopplerLevel = 1.0f;
+            src.spread = spread;
+            src.playOnAwake = false;
+
+            if (useSteamAudio)
+            {
+                try
+                {
+                    var steamSrc = child.AddComponent<SteamAudio.SteamAudioSource>();
+                    steamSrc.directBinaural = true;
+                    steamSrc.distanceAttenuation = true;
+                    steamSrc.distanceAttenuationInput = SteamAudio.DistanceAttenuationInput.CurveDriven;
+                    steamSrc.airAbsorption = true;
+                    steamSrc.occlusion = enableOcclusion;
+                    steamSrc.occlusionType = SteamAudio.OcclusionType.Volumetric;
+                    steamSrc.occlusionRadius = 0.25f;
+                    steamSrc.occlusionSamples = 8;
+                }
+                catch (System.Exception)
+                {
+                    src.spatialize = false;
+                }
+            }
+
+            return src;
         }
 
         private static float ComputeClipBaseF0(DroneHardwareSpec hw)
@@ -160,8 +164,8 @@ namespace FPVDrone
                 {
                     float dist = t * maxDist;
                     float norm = (t - minT) / (1.0f - minT);
-                    // Inverse-distance decay with smooth cosine-squared tail to hit 0 cleanly at maxDist
-                    float inv = minDist / dist;
+                    // Open-air acoustic decay with smooth cosine tail to hit 0 cleanly at maxDist
+                    float inv = Mathf.Pow(minDist / dist, 0.78f);
                     float tail = Mathf.Cos(norm * Mathf.PI * 0.5f);
                     val = Mathf.Clamp01(inv * tail);
                 }
