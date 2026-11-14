@@ -1,6 +1,6 @@
-# FPV Drone Freestyle
+# FPV Drone
 
-FPV quadcopter flight mod for ChilloutVR. Accessed from the `FPV Drone Freestyle` Quick Menu tab or `F6` / `F7`.
+FPV quadcopter flight mod for ChilloutVR. Accessed from the `FPV Drone` Quick Menu tab or `F6` / `F7`.
 
 ## Features
 - **Flight Modes & Custom Builds**: Acro (Betaflight rates), Angle (auto-level), and Position Hold, with 5", Tiny Whoop, and 7" presets or custom-built drone tuning (mass, TWR, drag, camera tilt, PIDs).

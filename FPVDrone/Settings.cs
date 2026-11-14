@@ -283,7 +283,7 @@ namespace FPVDrone
 
         public static void Initialize()
         {
-            var category = MelonPreferences.CreateCategory(CategoryName, "FPV Drone Freestyle");
+            var category = MelonPreferences.CreateCategory(CategoryName, "FPV Drone");
 
             Mode = category.CreateEntry("FlightMode", FlightMode.Acro, "Flight Mode (Acro, Angle, PositionHold)");
             ActivePreset = category.CreateEntry("ActivePreset", DronePreset.Freestyle5Inch, "Active Drone Hardware Preset");

@@ -4,7 +4,7 @@ using ABI_RC.Core.Player;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(FPVDrone.Main), "FPV Drone Freestyle", "1.0.0", "LensError")]
+[assembly: MelonInfo(typeof(FPVDrone.Main), "FPV Drone", "1.0.0", "LensError")]
 [assembly: MelonGame(null, "ChilloutVR")]
 
 namespace FPVDrone
