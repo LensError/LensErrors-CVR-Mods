@@ -19,3 +19,15 @@ FPV drone flight mod for ChilloutVR. Accessed from the `FPV Drone` Quick Menu ta
 | **Turtle Flip** | `Space` / `T` | `X` |
 | **Reset Drone** | `F8` | `Y` |
 | **Disarm / Exit** | `Esc` / `Tab` | - |
+
+<details>
+<summary>Screenshots</summary>
+
+| | |
+|---|---|
+| ![Quick Menu](img/quickmenu.png) | ![FPV View](img/fpv_flight.jpg) |
+| ![VTX Static](img/fpv_vtx.jpg) | ![Rates](img/config_rates.jpg) |
+| ![Flight](img/config_flight.jpg) | ![Physics](img/config_physics.jpg) |
+| ![Video & Audio](img/config_video_audio.jpg) | |
+
+</details>
