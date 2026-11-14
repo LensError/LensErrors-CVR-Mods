@@ -430,7 +430,10 @@ namespace FPVDrone
             drone.Rows.Add(Rows.Choice("Frame Size", () => $"{Settings.FrameWheelbaseMm.Value:F0} mm", CycleFrameSize, "Wheelbase (motor-to-motor diagonal). Automatically caps max prop size."));
             drone.Rows.Add(Rows.Toggle("Ducted Guards", () => Settings.IsDuctedFrame.Value, () => { Settings.IsDuctedFrame.Value = !Settings.IsDuctedFrame.Value; DroneBuilder.EnforceGeometryConstraints(); }, "Whoop ducts / prop guards: higher bounce restitution and bump tolerance.", "DUCTED", "OPEN PROP"));
             drone.Rows.Add(Rows.Choice("Prop Diameter", () => $"{Settings.PropDiameterInches.Value:F1}\" (max {DroneBuilder.MaxPropInchesForFrame(Settings.FrameWheelbaseMm.Value, Settings.IsDuctedFrame.Value):F1}\")", CyclePropSize, "Propeller diameter, clamped to physically fit the frame wheelbase."));
-            drone.Rows.Add(Rows.Float("Prop Pitch", Settings.PropPitchInches, 0.1f, 0.8f, 6.0f, v => F1(v) + "\"", "Propeller pitch (higher = more top speed and amp draw)."));
+            var propPitchRow = Rows.Float("Prop Pitch", Settings.PropPitchInches, 0.1f, 0.8f, 6.0f, v => F1(v) + "\"", "Propeller pitch (higher = more top speed and amp draw).");
+            var origSetPitch = propPitchRow.SetFloat;
+            propPitchRow.SetFloat = v => { origSetPitch(v); DroneBuilder.EnforceGeometryConstraints(); };
+            drone.Rows.Add(propPitchRow);
             drone.Rows.Add(Rows.Choice("Prop Blades", () => $"{Settings.PropBlades.Value}-Blade", CyclePropBlades, "Number of blades per propeller (2, 3, or 4). Affects thrust and audio BPF."));
 
             drone.Rows.Add(Rows.Section("Motors, ESC & Battery"));
@@ -861,8 +864,8 @@ namespace FPVDrone
             if (len < 0.5f) return;
             float ang = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg;
             Matrix4x4 prev = GUI.matrix;
-            GUIUtility.RotateAroundPivot(ang, a);
-            Fill(new Rect(a.x, a.y - width * 0.5f, len, width), c);
+            GUI.matrix = prev * Matrix4x4.TRS(new Vector3(a.x, a.y, 0f), Quaternion.Euler(0f, 0f, ang), Vector3.one);
+            Fill(new Rect(0f, -width * 0.5f, len, width), c);
             GUI.matrix = prev;
         }
 

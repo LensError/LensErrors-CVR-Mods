@@ -190,37 +190,112 @@ namespace FPVDrone
             return Mathf.Clamp(Mathf.Round(totalGrams) * 0.001f, 0.020f, 4.500f);
         }
 
+        private struct CacheKey
+        {
+            public float WheelbaseMm;
+            public bool IsDucted;
+            public float PropInches;
+            public float PropPitchInches;
+            public int PropBlades;
+            public float StatorDiamMm;
+            public float StatorHeightMm;
+            public float MotorKv;
+            public int BatteryCells;
+            public float BatteryCapMah;
+            public float EscAmps;
+            public bool AutoMass;
+            public float QuadMassKg;
+            public float PidSnappiness;
+            public bool AdvancedPid;
+            public float PidRpWn;
+            public float PidYawWn;
+            public float PidDamping;
+            public float SnapWobble;
+
+            public bool Equals(CacheKey other)
+            {
+                return WheelbaseMm == other.WheelbaseMm
+                    && IsDucted == other.IsDucted
+                    && PropInches == other.PropInches
+                    && PropPitchInches == other.PropPitchInches
+                    && PropBlades == other.PropBlades
+                    && StatorDiamMm == other.StatorDiamMm
+                    && StatorHeightMm == other.StatorHeightMm
+                    && MotorKv == other.MotorKv
+                    && BatteryCells == other.BatteryCells
+                    && BatteryCapMah == other.BatteryCapMah
+                    && EscAmps == other.EscAmps
+                    && AutoMass == other.AutoMass
+                    && QuadMassKg == other.QuadMassKg
+                    && PidSnappiness == other.PidSnappiness
+                    && AdvancedPid == other.AdvancedPid
+                    && PidRpWn == other.PidRpWn
+                    && PidYawWn == other.PidYawWn
+                    && PidDamping == other.PidDamping
+                    && SnapWobble == other.SnapWobble;
+            }
+        }
+
+        private static bool _hasCachedSpec;
+        private static CacheKey _cachedKey;
+        private static DroneHardwareSpec _cachedSpec;
+
         public static DroneHardwareSpec EvaluateCurrent()
         {
-            float massKg = Settings.QuadMassKg.Value;
-            if (Settings.AutoEstimateMass.Value)
+            CacheKey key = new CacheKey
             {
-                massKg = EstimateMassKg(
-                    Settings.FrameWheelbaseMm.Value,
-                    Settings.IsDuctedFrame.Value,
-                    Settings.PropDiameterInches.Value,
-                    Settings.MotorStatorDiameterMm.Value,
-                    Settings.MotorStatorHeightMm.Value,
-                    Settings.BatteryCells.Value,
-                    Settings.BatteryCapacityMah.Value
-                );
-                Settings.QuadMassKg.Value = massKg;
-            }
+                WheelbaseMm = Settings.FrameWheelbaseMm.Value,
+                IsDucted = Settings.IsDuctedFrame.Value,
+                PropInches = Settings.PropDiameterInches.Value,
+                PropPitchInches = Settings.PropPitchInches.Value,
+                PropBlades = Settings.PropBlades.Value,
+                StatorDiamMm = Settings.MotorStatorDiameterMm.Value,
+                StatorHeightMm = Settings.MotorStatorHeightMm.Value,
+                MotorKv = Settings.MotorKv.Value,
+                BatteryCells = Settings.BatteryCells.Value,
+                BatteryCapMah = Settings.BatteryCapacityMah.Value,
+                EscAmps = Settings.EscAmperage.Value,
+                AutoMass = Settings.AutoEstimateMass.Value,
+                QuadMassKg = Settings.QuadMassKg.Value,
+                PidSnappiness = Settings.PidSnappiness != null ? Settings.PidSnappiness.Value : 1.0f,
+                AdvancedPid = Settings.AdvancedPidTuning != null && Settings.AdvancedPidTuning.Value,
+                PidRpWn = Settings.PidRollPitchWn != null ? Settings.PidRollPitchWn.Value : 42.0f,
+                PidYawWn = Settings.PidYawWn != null ? Settings.PidYawWn.Value : 26.0f,
+                PidDamping = Settings.PidDamping != null ? Settings.PidDamping.Value : 0.85f,
+                SnapWobble = Settings.SnapWobbleStrength != null ? Settings.SnapWobbleStrength.Value : 1.0f
+            };
 
-            return Evaluate(
-                Settings.FrameWheelbaseMm.Value,
-                Settings.IsDuctedFrame.Value,
-                Settings.PropDiameterInches.Value,
-                Settings.PropPitchInches.Value,
-                Settings.PropBlades.Value,
-                Settings.MotorStatorDiameterMm.Value,
-                Settings.MotorStatorHeightMm.Value,
-                Settings.MotorKv.Value,
-                Settings.BatteryCells.Value,
-                Settings.BatteryCapacityMah.Value,
-                Settings.EscAmperage.Value,
+            if (_hasCachedSpec && _cachedKey.Equals(key))
+                return _cachedSpec;
+
+            float massKg = key.AutoMass
+                ? EstimateMassKg(
+                    key.WheelbaseMm,
+                    key.IsDucted,
+                    key.PropInches,
+                    key.StatorDiamMm,
+                    key.StatorHeightMm,
+                    key.BatteryCells,
+                    key.BatteryCapMah)
+                : key.QuadMassKg;
+
+            _cachedSpec = Evaluate(
+                key.WheelbaseMm,
+                key.IsDucted,
+                key.PropInches,
+                key.PropPitchInches,
+                key.PropBlades,
+                key.StatorDiamMm,
+                key.StatorHeightMm,
+                key.MotorKv,
+                key.BatteryCells,
+                key.BatteryCapMah,
+                key.EscAmps,
                 massKg
             );
+            _cachedKey = key;
+            _hasCachedSpec = true;
+            return _cachedSpec;
         }
 
         public static DroneHardwareSpec Evaluate(
@@ -286,17 +361,19 @@ namespace FPVDrone
 
             // Stator volume (mm^3) -> motor torque capacity & prop load matching
             float statorVol = statorDiamMm * statorDiamMm * statorHeightMm;
-            float motorEfficiency = 0.78f;
 
-            // Reference loaded RPM at nominal voltage before ESC limiting
-            // Larger prop (D^5) vs stator volume causes realistic RPM droop under load
-            float propLoadIndex = Mathf.Pow(propDiamM / 0.12954f, 4.2f) * (pitchRatio / 0.84f);
+            // Reference loaded RPM at nominal voltage before ESC/stator limiting
+            // Larger prop (D^4.2) and blade count vs stator volume causes realistic RPM droop under load
+            float propLoadIndex = Mathf.Pow(propDiamM / 0.12954f, 4.2f) * (pitchRatio / 0.84f) * bladeFactorCp;
             float motorTorqueIndex = Mathf.Max(0.02f, statorVol / 3388f); // normalized to 2207
             float torqueRatio = motorTorqueIndex / Mathf.Max(0.002f, propLoadIndex);
             bool isUnderTorqued = torqueRatio < 0.45f;
 
-            // Loaded RPM factor: ~0.82 for well-matched, drops if prop is too heavy for stator
-            float loadedFactor = Mathf.Clamp(0.84f - 0.18f / Mathf.Max(0.25f, torqueRatio), 0.42f, 0.85f);
+            // Under-torqued motors suffer heavy copper/slip losses instead of holding full efficiency
+            float motorEfficiency = 0.78f * Mathf.Clamp(torqueRatio / 0.45f, 0.35f, 1.0f);
+
+            // Loaded RPM factor: ~0.77 for well-matched 2207/5", drops sharply if prop is too heavy for stator
+            float loadedFactor = Mathf.Clamp(0.86f - 0.09f / Mathf.Max(0.10f, torqueRatio), 0.18f, 0.85f);
             float maxRpmUnclamped = motorKv * fullVolt * loadedFactor;
 
             // Electrical current draw at maxRpmUnclamped
@@ -307,13 +384,17 @@ namespace FPVDrone
             float elecPowerPerMotor = shaftPowerPerMotor / motorEfficiency;
             float reqCurrentPerMotor = elecPowerPerMotor / Mathf.Max(2.5f, fullVolt);
 
-            bool isEscLimited = reqCurrentPerMotor > escAmps;
+            // Stator current ceiling prevents tiny motors from abusing oversized ESCs on large props
+            float motorMaxAmps = 48.0f * Mathf.Pow(statorVol / 3388.0f, 0.72f);
+            float effectiveCurrentLimit = Mathf.Min(escAmps, motorMaxAmps);
+            bool isEscLimited = reqCurrentPerMotor > escAmps && escAmps <= motorMaxAmps;
+
             float maxLoadedRpm = maxRpmUnclamped;
-            if (isEscLimited)
+            if (reqCurrentPerMotor > effectiveCurrentLimit)
             {
-                // P ~ n^3, so capping current/power scales n by (I_esc / I_req)^(1/3)
-                float escScale = Mathf.Pow(escAmps / Mathf.Max(0.1f, reqCurrentPerMotor), 1.0f / 3.0f);
-                maxLoadedRpm *= escScale;
+                // P ~ n^3, so capping current/power scales n by (I_limit / I_req)^(1/3)
+                float currentScale = Mathf.Pow(effectiveCurrentLimit / Mathf.Max(0.1f, reqCurrentPerMotor), 1.0f / 3.0f);
+                maxLoadedRpm *= currentScale;
             }
 
             float nMax = maxLoadedRpm / 60f;
@@ -323,7 +404,7 @@ namespace FPVDrone
             float twr = maxThrustTotal / Mathf.Max(0.05f, weightN);
             float hoverThrottle = DronePhysics.CalculateHoverThrottle(twr);
 
-            float actualPerMotorCurrent = Mathf.Min(reqCurrentPerMotor, escAmps);
+            float actualPerMotorCurrent = Mathf.Min(reqCurrentPerMotor, effectiveCurrentLimit);
             float peakCurrentTotal = actualPerMotorCurrent * 4f;
 
             // Pitch speed: V_pitch = n * pitch_m

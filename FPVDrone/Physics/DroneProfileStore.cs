@@ -24,6 +24,7 @@ namespace FPVDrone
         public int BatteryCells;
         public float BatteryCapacityMah;
         public float EscAmperage;
+        public bool AutoEstimateMass = true;
         public float QuadMassKg;
 
         // Camera & Rates
@@ -355,7 +356,8 @@ namespace FPVDrone
                 BatteryCells = Settings.BatteryCells.Value,
                 BatteryCapacityMah = Settings.BatteryCapacityMah.Value,
                 EscAmperage = Settings.EscAmperage.Value,
-                QuadMassKg = Settings.QuadMassKg.Value,
+                AutoEstimateMass = Settings.AutoEstimateMass.Value,
+                QuadMassKg = DroneBuilder.EvaluateCurrent().MassKg,
                 CameraTiltAngle = Settings.CameraTiltAngle.Value,
                 CameraHeightOffsetMm = Settings.CameraHeightOffsetMm.Value,
                 CameraForwardOffsetMm = Settings.CameraForwardOffsetMm.Value,
@@ -399,6 +401,7 @@ namespace FPVDrone
             Settings.BatteryCells.Value = p.BatteryCells;
             Settings.BatteryCapacityMah.Value = p.BatteryCapacityMah;
             Settings.EscAmperage.Value = p.EscAmperage;
+            Settings.AutoEstimateMass.Value = p.AutoEstimateMass;
             Settings.QuadMassKg.Value = p.QuadMassKg;
 
             DroneBuilder.EnforceGeometryConstraints();
