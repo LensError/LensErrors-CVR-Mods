@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <Platforms>x64</Platforms>
+    <Version>1.0.0</Version>
+    <AssemblyName>FPVDrone</AssemblyName>
+    <RootNamespace>FPVDrone</RootNamespace>
+    <FailOnCVRDeployError>false</FailOnCVRDeployError>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="MelonLoader"><HintPath>$(CVRPath)/MelonLoader/net35/MelonLoader.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="0Harmony"><HintPath>$(CVRPath)/MelonLoader/net35/0Harmony.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.CoreModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.AudioModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.XRModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.XRModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="Unity.InputSystem"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/Unity.InputSystem.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(CVRPath)/ChilloutVR_Data/Managed/Assembly-CSharp.dll</HintPath><Private>false</Private><SpecificVersion>false</SpecificVersion></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="resources\drone_2.png" />
+    <EmbeddedResource Include="resources\KlakSpout.dll" />
+  </ItemGroup>
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Condition="'$(FailOnCVRDeployError)' == 'true'" Command="copy /y &quot;$(TargetPath)&quot; &quot;$(CVRPath)/Mods/&quot;" />
+    <Exec Condition="'$(FailOnCVRDeployError)' != 'true'" Command="copy /y &quot;$(TargetPath)&quot; &quot;$(CVRPath)/Mods/&quot;" IgnoreExitCode="true" />
+  </Target>
+</Project>

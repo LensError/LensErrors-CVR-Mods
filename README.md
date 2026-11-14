@@ -8,8 +8,8 @@ A collection of mods I've made for ChilloutVR. Some original ideas, some takes o
 |-----|-------|----------|
 | [BetterScrollFlight](BetterScrollFlight/README.md) | Scroll wheel adjusts flight speed while flying in worlds that allow it, with optional modifier key | [![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/BetterScrollFlight.dll) |
 | [Player History](PlayerHistory/README.md) | Records players you've encountered, with timestamps and a friends filter | [![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll) |
-| [CVR OpenAI TTS](CVROpenAITTS/README.md) | Adds local AI and OpenAI-compatible TTS modules alongside the built-in Windows voice | [![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/CVROpenAITTS.dll) |
-| [Content Menu Tweaks](ContentMenuTweaks/README.md) | Adds recent content categories and friend-joinable active instances to CVR content menus | Coming Soon |
+| [ExternalTTS](ExternalTTS/README.md) | Routes CVR TTS and ChatBox/OSC speech to Fish Audio or a local Kokoro server | Coming Soon |
+| [FPV Drone Freestyle](FPVDrone/README.md) | FPV quadcopter flight simulator with Betaflight rates, spatial audio, VTX simulation, and Spout2 output | Coming Soon |
 | [ThirdPersonOptions](ThirdPersonOptions/README.md) | Adds desktop third-person options, including disabling scroll wheel changes by default and Ctrl+T toggle | Coming Soon |
 | [Bunnyhop](Bunnyhop/README.md) | Increases speed when jumps are chained | Coming Soon |
 

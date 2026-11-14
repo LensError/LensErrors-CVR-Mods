@@ -1,0 +1,24 @@
+{
+  "_id": -1,
+  "name": "ExternalTTS",
+  "modversion": "1.0.0",
+  "gameversion": "2026r181",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "Replaces CVR TTS and ChatBox/OSC speech using Fish Audio (API key) or a local [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) server, sending outgoing TTS text to your configured endpoint. More info: [GitHub README](https://github.com/LensError/LensErrors-CVR-Mods/blob/main/ExternalTTS/README.md).",
+  "searchtags": [
+    "tts",
+    "text-to-speech",
+    "voice",
+    "fish audio",
+    "kokoro",
+    "chatbox"
+  ],
+  "requirements": [],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/ExternalTTS.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/ExternalTTS",
+  "changelog": "Initial release",
+  "embedcolor": "#321D71"
+}
+

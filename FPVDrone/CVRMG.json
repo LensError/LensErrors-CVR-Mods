@@ -1,0 +1,24 @@
+{
+  "_id": -1,
+  "name": "FPV Drone Freestyle",
+  "modversion": "1.0.0",
+  "gameversion": "2026r181",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "FPV Drone simulator mod for ChilloutVR with Acro/Angle/Position Hold flight modes, Betaflight rates, custom drone tuning, 4-motor spatial audio, and 5.8 GHz VTX signal simulation (RC transmitter recommended, VR is WIP). More info: [GitHub README](https://github.com/LensError/LensErrors-CVR-Mods/blob/main/FPVDrone/README.md).",
+  "searchtags": [
+    "fpv",
+    "drone",
+    "quadcopter",
+    "flight",
+    "betaflight",
+    "spout",
+    "camera"
+  ],
+  "requirements": [],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/FPVDrone.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/FPVDrone",
+  "changelog": "Initial release",
+  "embedcolor": "#321D71"
+}
