@@ -1,5 +1,7 @@
 # ThirdPersonOptions
 
+[![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/ThirdPersonOptions.dll)
+
 Small ChilloutVR desktop camera utility for extra third-person controls.
 
 ## Features

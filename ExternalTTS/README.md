@@ -1,5 +1,7 @@
 # ExternalTTS
 
+[![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/ExternalTTS.dll)
+
 Routes ChilloutVR TTS and ChatBox/OSC messages to Fish Audio (cloud or local) or a local Kokoro-FastAPI server. Configured in `Quick Menu` -> `LensError's Mods` -> `External TTS`.
 
 ## Prerequisites

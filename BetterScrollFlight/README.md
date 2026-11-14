@@ -1,5 +1,7 @@
 # BetterScrollFlight
 
+[![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/BetterScrollFlight.dll)
+
 Adjusts flight speed using the mouse scroll wheel while flying in worlds that permit flight.
 
 Requires [UI Expansion Kit](https://github.com/knah/CVRMods).

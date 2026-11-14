@@ -1,5 +1,7 @@
 # Bunnyhop
 
+[![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/Bunnyhop.dll)
+
 Increases horizontal movement speed when jumps are chained before staying grounded. Preserves default jump height and clamps speed relative to current world limits.
 
 ## Controls & Settings
