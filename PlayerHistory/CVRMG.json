@@ -1,7 +1,7 @@
 {
-  "_id": -1,
+  "_id": 284,
   "name": "Player History",
-  "modversion": "1.0.0",
+  "modversion": "1.0.1",
   "gameversion": "2026r182",
   "loaderversion": "0.7.2",
   "modtype": "Mod",
@@ -17,6 +17,6 @@
   "requirements": [],
   "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll",
   "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/PlayerHistory",
-  "changelog": "Initial release",
+  "changelog": "Updated for CVR 2026r182 and migrated to CVR's native UILib.",
   "embedcolor": "#321D71"
 }

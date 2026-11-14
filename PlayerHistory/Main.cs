@@ -1,6 +1,6 @@
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(PlayerHistory.Main), "Player History", "1.0.0", "LensError")]
+[assembly: MelonInfo(typeof(PlayerHistory.Main), "Player History", "1.0.1", "LensError")]
 [assembly: MelonGame(null, "ChilloutVR")]
 
 namespace PlayerHistory
