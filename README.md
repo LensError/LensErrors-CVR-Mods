@@ -9,7 +9,7 @@ A collection of mods I've made for ChilloutVR. Some original ideas, some takes o
 | [BetterScrollFlight](BetterScrollFlight/README.md) | Scroll wheel adjusts flight speed while flying in worlds that allow it, with optional modifier key | [![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/BetterScrollFlight.dll) |
 | [Player History](PlayerHistory/README.md) | Records players you've encountered, with timestamps and a friends filter | [![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/PlayerHistory.dll) |
 | [ExternalTTS](ExternalTTS/README.md) | Routes CVR TTS and ChatBox/OSC speech to Fish Audio or a local Kokoro server | Coming Soon |
-| [FPV Drone](FPVDrone/README.md) | FPV quadcopter flight simulator with Betaflight rates, spatial audio, VTX simulation, and Spout2 output | Coming Soon |
+| [FPV Drone](FPVDrone/README.md) | FPV drone flight simulator with Betaflight rates, spatial audio, VTX simulation, and Spout2 output | Coming Soon |
 | [ThirdPersonOptions](ThirdPersonOptions/README.md) | Adds desktop third-person options, including disabling scroll wheel changes by default and Ctrl+T toggle | Coming Soon |
 | [Bunnyhop](Bunnyhop/README.md) | Increases speed when jumps are chained | Coming Soon |
 | [Quick Menu Settings Toolbox](QuickMenuSettingsToolbox/README.md) | Moves Quick Menu settings into the Toolbox tab so the Settings button opens the full main menu | Coming Soon |

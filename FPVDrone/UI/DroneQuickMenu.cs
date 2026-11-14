@@ -26,7 +26,7 @@ namespace FPVDrone
         {
             var page = new Page(ModName, PageName, isRootPage: true, tabIcon: IconName);
             page.MenuTitle = "FPV Drone";
-            page.MenuSubtitle = "FPV quadcopter flight & configurator";
+            page.MenuSubtitle = "FPV drone flight & configurator";
 
             var category = page.AddCategory("Controls");
 
