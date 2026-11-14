@@ -1,0 +1,22 @@
+{
+  "_id": -1,
+  "name": "Quick Menu Settings Toolbox",
+  "modversion": "1.0.2",
+  "gameversion": "2026r182",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "Moves ChilloutVR's built-in Quick Menu settings controls into the Toolbox tab so the Settings button opens the full main menu instead. More info: [GitHub README](https://github.com/LensError/LensErrors-CVR-Mods/blob/main/QuickMenuSettingsToolbox/README.md).",
+  "searchtags": [
+    "quickmenu",
+    "settings",
+    "toolbox",
+    "ui"
+  ],
+  "requirements": [],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/QuickMenuSettingsToolbox.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/QuickMenuSettingsToolbox",
+  "changelog": "Initial release",
+  "embedcolor": "#321D71"
+}
+

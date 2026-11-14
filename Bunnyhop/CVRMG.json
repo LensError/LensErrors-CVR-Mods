@@ -1,0 +1,23 @@
+{
+  "_id": -1,
+  "name": "Bunnyhop",
+  "modversion": "1.0.0",
+  "gameversion": "2026r182",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "Increases movement speed when jumps are chained in worlds that allow flight/movement mods. More info: [GitHub README](https://github.com/LensError/LensErrors-CVR-Mods/blob/main/Bunnyhop/README.md).",
+  "searchtags": [
+    "bunnyhop",
+    "bhop",
+    "jump",
+    "speed",
+    "movement"
+  ],
+  "requirements": [],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/Bunnyhop.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/Bunnyhop",
+  "changelog": "Initial release",
+  "embedcolor": "#321D71"
+}
+

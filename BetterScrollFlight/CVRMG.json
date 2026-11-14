@@ -2,24 +2,20 @@
   "_id": -1,
   "name": "BetterScrollFlight",
   "modversion": "1.0.0",
-  "gameversion": "2026r181",
+  "gameversion": "2026r182",
   "loaderversion": "0.7.2",
   "modtype": "Mod",
   "author": "LensError",
-  "description": "While in fly/noclip mode (only in worlds that allow flight), scrolling the mouse wheel adjusts your flight speed multiplier. Middle-click resets speed to 1x. An optional modifier key (default: Left Ctrl) can be required so that normal scrolling is unaffected.\n\nSettings via the Mods settings panel (UI Expansion Kit required):\n- Enable/disable the mod\n- Show/hide the HUD speed readout while flying\n- Toggle whether a modifier key must be held\n- Cycle through modifier keys (Left Shift, Left Ctrl, Left Alt, Caps Lock)\n- Adjust scroll sensitivity (5-50% change per tick, shown as slider)\n- Live speed scale readout and reset button\n\nSpeed scale persists between sessions. Only affects flight speed when the world has flight enabled.",
+  "description": "Adjusts flight speed with the scroll wheel while flying in worlds that allow it, with an optional modifier key. More info: [GitHub README](https://github.com/LensError/LensErrors-CVR-Mods/blob/main/BetterScrollFlight/README.md).",
   "searchtags": [
     "flight",
-    "fly",
-    "noclip",
-    "speed",
     "scroll",
+    "speed",
     "movement"
   ],
-  "requirements": [
-    "[UI Expansion Kit](https://github.com/knah/CVRMods)"
-  ],
+  "requirements": [],
   "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/BetterScrollFlight.dll",
-  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/BetterScrollFlight",
   "changelog": "Initial release",
-  "embedcolor": "#5865F2"
+  "embedcolor": "#321D71"
 }

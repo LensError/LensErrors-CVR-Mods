@@ -1,0 +1,22 @@
+{
+  "_id": -1,
+  "name": "ThirdPersonOptions",
+  "modversion": "1.0.0",
+  "gameversion": "2026r182",
+  "loaderversion": "0.7.2",
+  "modtype": "Mod",
+  "author": "LensError",
+  "description": "Adds desktop third-person camera options, including disabling scroll wheel zoom changes by default and a Ctrl+T toggle. More info: [GitHub README](https://github.com/LensError/LensErrors-CVR-Mods/blob/main/ThirdPersonOptions/README.md).",
+  "searchtags": [
+    "thirdperson",
+    "camera",
+    "desktop",
+    "scroll"
+  ],
+  "requirements": [],
+  "downloadlink": "https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/ThirdPersonOptions.dll",
+  "sourcelink": "https://github.com/LensError/LensErrors-CVR-Mods/tree/main/ThirdPersonOptions",
+  "changelog": "Initial release",
+  "embedcolor": "#321D71"
+}
+
