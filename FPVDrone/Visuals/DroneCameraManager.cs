@@ -341,7 +341,10 @@ namespace FPVDrone
                 _spoutOsdRenderTexture.Create();
             }
 
+            bool prevSrgb = GL.sRGBWrite;
+            GL.sRGBWrite = QualitySettings.activeColorSpace == ColorSpace.Linear;
             Graphics.Blit(_fpvRenderTexture, _spoutOsdRenderTexture);
+            GL.sRGBWrite = prevSrgb;
 
             RenderTexture prevActive = RenderTexture.active;
             RenderTexture.active = _spoutOsdRenderTexture;
@@ -604,7 +607,7 @@ namespace FPVDrone
                 CreateRenderTexture(targetW, targetH);
             }
 
-            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _fpvRenderTexture, ScaleMode.StretchToFill);
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _fpvRenderTexture, ScaleMode.StretchToFill, false);
         }
 
         private void EnsureVrGogglesDisplay()

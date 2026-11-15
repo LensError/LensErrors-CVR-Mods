@@ -60,6 +60,8 @@ namespace FPVDrone
         // Reusable corner buffer for multi-point floor contact
         private readonly Vector3[] _contactPointsLocal = new Vector3[8];
         private readonly Collider[] _overlapBuffer = new Collider[8];
+        private readonly float[] _motorDemands = new float[4];
+        private float _cachedGroundAltitude = -1.0f;
 
         // Layer mask for world collisions (Excludes UI, PlayerClone, UIInternal, DroneMeshLayer, DroneDiscardLayer)
         public static readonly int WorldCollisionMask = ~((1 << 5) | (1 << 9) | (1 << 15) | (1 << DroneMeshRenderer.DroneMeshLayer) | (1 << DroneMeshRenderer.DroneDiscardLayer));
@@ -198,6 +200,8 @@ namespace FPVDrone
                 return;
             }
 
+            _cachedGroundAltitude = CheckGroundAltitude(hw);
+
             _physicsAccumulator += Mathf.Min(dt, 0.050f);
             while (_physicsAccumulator >= FixedSubstepDt)
             {
@@ -300,13 +304,20 @@ namespace FPVDrone
 
         private void UpdateBattery(DroneHardwareSpec hw, float subDt, float effectiveThrottle)
         {
-            float motorSpoolAlpha = 1.0f - Mathf.Exp(-subDt / hw.MotorSpoolTau);
+            float spoolTau = effectiveThrottle < _rpmSmoothed ? hw.MotorSpoolTau * 0.72f : hw.MotorSpoolTau;
+            float motorSpoolAlpha = 1.0f - Mathf.Exp(-subDt / spoolTau);
             _rpmSmoothed = Mathf.Lerp(_rpmSmoothed, effectiveThrottle, motorSpoolAlpha);
             CurrentRpmPercent = _rpmSmoothed * 100.0f;
 
-            // Electrical current scales roughly with mechanical power (~RPM^2.6 from idle to peak)
+            // Electrical current scales with actual 4-motor power draw (~throttle^2.2)
             float idleCurrent = 0.5f + hw.BatteryCells * 0.18f;
-            BatteryCurrentAmps = Mathf.Lerp(idleCurrent, hw.PeakCurrentAmps, Mathf.Pow(_rpmSmoothed, 2.2f));
+            float avgMotorPower = 0.0f;
+            for (int i = 0; i < 4; i++)
+            {
+                avgMotorPower += Mathf.Pow(Mathf.Clamp01(MotorThrottles[i]), 2.2f);
+            }
+            avgMotorPower *= 0.25f;
+            BatteryCurrentAmps = Mathf.Lerp(idleCurrent, hw.PeakCurrentAmps, avgMotorPower);
 
             float voltageSag = Settings.EnableVoltageSag.Value ? (BatteryCurrentAmps * hw.InternalResistanceOhms) : 0.0f;
 
@@ -342,11 +353,9 @@ namespace FPVDrone
 
         private void GetPitchRollAngles(out float currentPitch, out float currentRoll)
         {
-            Vector3 forward = Rotation * Vector3.forward;
-            Vector3 right = Rotation * Vector3.right;
-
-            currentPitch = -Mathf.Asin(Mathf.Clamp(forward.y, -0.999f, 0.999f)) * Mathf.Rad2Deg;
-            currentRoll = -Mathf.Asin(Mathf.Clamp(right.y, -0.999f, 0.999f)) * Mathf.Rad2Deg;
+            Vector3 localUp = Quaternion.Inverse(Rotation) * Vector3.up;
+            currentPitch = Mathf.Atan2(localUp.z, localUp.y) * Mathf.Rad2Deg;
+            currentRoll = Mathf.Atan2(-localUp.x, localUp.y) * Mathf.Rad2Deg;
         }
 
         private Vector3 ComputeRateTargets(DroneHardwareSpec hw, float pitchStick, float rollStick, float yawStick, float forwardSpeed)
@@ -477,14 +486,20 @@ namespace FPVDrone
                 }
             }
 
-            float motorSpoolAlphaIndiv = 1.0f - Mathf.Exp(-subDt / hw.MotorSpoolTau);
+            float motorSpoolAlphaUp = 1.0f - Mathf.Exp(-subDt / hw.MotorSpoolTau);
+            float motorSpoolAlphaDown = 1.0f - Mathf.Exp(-subDt / (hw.MotorSpoolTau * 0.72f));
             float voltageRatio = Mathf.Clamp(BatteryVoltage / Mathf.Max(1.0f, hw.FullVoltage), 0.65f, 1.05f);
             float maxLiveRpm = hw.MaxLoadedRpm * voltageRatio;
 
-            float[] demands = { m1Demand, m2Demand, m3Demand, m4Demand };
+            _motorDemands[0] = m1Demand;
+            _motorDemands[1] = m2Demand;
+            _motorDemands[2] = m3Demand;
+            _motorDemands[3] = m4Demand;
             for (int i = 0; i < 4; i++)
             {
-                MotorThrottles[i] = Mathf.Lerp(MotorThrottles[i], Mathf.Clamp01(demands[i]), motorSpoolAlphaIndiv);
+                float targetDemand = Mathf.Clamp01(_motorDemands[i]);
+                float alpha = targetDemand < MotorThrottles[i] ? motorSpoolAlphaDown : motorSpoolAlphaUp;
+                MotorThrottles[i] = Mathf.Lerp(MotorThrottles[i], targetDemand, alpha);
                 // Motor RPM scales roughly as throttle^0.925 (consistent with Thrust ~ throttle^1.85 ~ RPM^2)
                 float rpmNorm = Mathf.Pow(Mathf.Clamp01(MotorThrottles[i]), 0.925f);
                 MotorRpms[i] = rpmNorm * maxLiveRpm;
@@ -500,7 +515,7 @@ namespace FPVDrone
             out float axialInflowFactor,
             out float etlLiftMultiplier)
         {
-            float groundAltitude = CheckGroundAltitude(hw);
+            float groundAltitude = _cachedGroundAltitude;
             IsInGroundEffect = groundAltitude > 0.0f && groundAltitude < hw.GroundEffectMaxAltM;
             groundEffectMultiplier = 1.0f;
             if (IsInGroundEffect)
@@ -511,13 +526,17 @@ namespace FPVDrone
 
             float bodyAxialSpeed = Vector3.Dot(LinearVelocity, Rotation * Vector3.up);
             float bodyEdgewiseSpeed = Vector3.ProjectOnPlane(LinearVelocity, Rotation * Vector3.up).magnitude;
-            IsInPropWash = !IsOnGround && bodyAxialSpeed < -1.8f && bodyEdgewiseSpeed < 3.5f && _rpmSmoothed > 0.10f;
+            float descentFactor = Mathf.Clamp01((-bodyAxialSpeed - 1.8f) / 3.5f);
+            float edgewiseWashFactor = 1.0f - Mathf.Clamp01(bodyEdgewiseSpeed / 4.5f);
+            float rpmWashFactor = Mathf.Clamp01((_rpmSmoothed - 0.08f) / 0.12f);
+            float propWashSeverity = descentFactor * edgewiseWashFactor * rpmWashFactor * Settings.PropWashStrength.Value;
+
+            IsInPropWash = !IsOnGround && propWashSeverity > 0.05f;
 
             propWashThrustLoss = 0.0f;
             propWashBuffetAcc = Vector3.zero;
-            if (IsInPropWash)
+            if (!IsOnGround && propWashSeverity > 0.001f)
             {
-                float propWashSeverity = Mathf.Clamp01((-bodyAxialSpeed - 1.8f) / 3.5f) * Settings.PropWashStrength.Value;
                 propWashThrustLoss = propWashSeverity * 0.22f;
 
                 float timeOsc = _physicsTime * 22.0f;
@@ -622,6 +641,11 @@ namespace FPVDrone
 
         private void IntegrateAttitude(DroneHardwareSpec hw, Vector3 targetRatesDeg, Vector3 propWashBuffetAcc, float subDt)
         {
+            if (IsCrashed && IsOnGround)
+            {
+                targetRatesDeg = Vector3.zero;
+            }
+
             float wnRP = hw.RollPitchWn;
             float zetaRP = hw.RollPitchZeta;
             float errPitch = targetRatesDeg.x - _currentLocalAngularVelDeg.x;
@@ -778,11 +802,23 @@ namespace FPVDrone
                         OnCollisionImpact?.Invoke(-vNorm);
                     }
 
-                    Vector3 contactOffset = hit.point != Vector3.zero
-                        ? (hit.point - Position)
-                        : (-direction * hw.HalfSpanM);
+                    bool isFloor = normal.y > 0.65f;
+                    bool restingOnFloor = IsOnGround && isFloor && CurrentThrustNewtons < hw.MassKg * 9.81f * 0.98f;
+                    if (!restingOnFloor)
+                    {
+                        Vector3 contactOffset = hit.point != Vector3.zero
+                            ? (hit.point - Position)
+                            : (-direction * hw.HalfSpanM);
 
-                    ApplyRigidBodyImpulse(hw, contactOffset, normal, hw.CollisionRestitution, 0.25f);
+                        float stepRestitution = (isFloor && -vNorm * hw.CollisionRestitution < 0.28f)
+                            ? 0.0f
+                            : hw.CollisionRestitution;
+                        ApplyRigidBodyImpulse(hw, contactOffset, normal, stepRestitution, 0.25f);
+                    }
+                    else
+                    {
+                        LinearVelocity -= normal * vNorm;
+                    }
 
                     if (-vNorm > 4.5f && !hw.IsDucted)
                     {
@@ -887,8 +923,20 @@ namespace FPVDrone
 
                     float bounceThreshold = 0.28f;
                     float effRestitution = (-vN * hw.CollisionRestitution < bounceThreshold) ? 0.0f : hw.CollisionRestitution;
-                    ApplyRigidBodyImpulse(hw, deepestOffsetWorld, deepestNormal, effRestitution, 0.45f);
-                    IsOnGround = effRestitution == 0.0f;
+                    if (IsOnGround && effRestitution == 0.0f && -vN < 0.35f && CurrentThrustNewtons < hw.MassKg * 9.81f * 0.98f)
+                    {
+                        // Settled on floor: cancel downward velocity without single-corner rocking impulse
+                        float vCenterN = Vector3.Dot(LinearVelocity, deepestNormal);
+                        if (vCenterN < 0.0f)
+                            LinearVelocity -= deepestNormal * vCenterN;
+                        if (dotUp > 0.5f)
+                            Rotation = Quaternion.Slerp(Rotation, Quaternion.FromToRotation(quadUp, deepestNormal) * Rotation, dt * 14.0f);
+                    }
+                    else
+                    {
+                        ApplyRigidBodyImpulse(hw, deepestOffsetWorld, deepestNormal, effRestitution, 0.45f);
+                        IsOnGround = effRestitution == 0.0f;
+                    }
                 }
                 else
                 {
