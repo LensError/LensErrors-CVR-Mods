@@ -5,6 +5,7 @@ namespace FPVDrone
     public class DroneMeshRenderer
     {
         public const int DroneMeshLayer = 30;
+        public const int DroneDiscardLayer = 31;
 
         private GameObject _root;
         private readonly Transform[] _propHubs = new Transform[4];
@@ -224,6 +225,14 @@ namespace FPVDrone
             go.transform.localPosition = localPos;
             go.transform.localScale = scale;
             go.GetComponent<Renderer>().sharedMaterial = mat;
+        }
+
+        public void SetVisible(bool visible)
+        {
+            if (_root != null && _root.activeSelf != visible)
+            {
+                _root.SetActive(visible);
+            }
         }
 
         public void Destroy()

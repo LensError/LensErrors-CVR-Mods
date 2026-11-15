@@ -64,6 +64,7 @@ namespace FPVDrone
         public float HoverThrottle01;
         public float PeakCurrentAmps;
         public float PitchSpeedMaxMps;
+        public float EstMaxSpeedMps;
         public float MotorSpoolTau;
         public float RollPitchWn;
         public float YawWn;
@@ -91,7 +92,7 @@ namespace FPVDrone
 
         public static readonly float[] PopularEscAmps =
         {
-            5f, 12f, 20f, 35f, 45f, 50f, 60f, 80f
+            5f, 12f, 20f, 35f, 45f, 50f, 60f, 80f, 100f
         };
 
         public static readonly MotorSizePreset[] PopularMotors =
@@ -100,10 +101,11 @@ namespace FPVDrone
             new MotorSizePreset { Name = "1103 (75-85mm)", StatorDiameterMm = 11f, StatorHeightMm = 3f, PopularKvs = new[] { 8000f, 11000f, 13500f } },
             new MotorSizePreset { Name = "1404 (2.5-3\" Micro)", StatorDiameterMm = 14f, StatorHeightMm = 4f, PopularKvs = new[] { 2800f, 3800f, 4600f } },
             new MotorSizePreset { Name = "2004 (3.5\" Cinewhoop)", StatorDiameterMm = 20f, StatorHeightMm = 4f, PopularKvs = new[] { 1700f, 2400f, 3000f } },
-            new MotorSizePreset { Name = "2207 (5\" Freestyle)", StatorDiameterMm = 22f, StatorHeightMm = 7f, PopularKvs = new[] { 1750f, 1850f, 1950f, 2450f, 2750f } },
+            new MotorSizePreset { Name = "2207 (5\" Freestyle/Race)", StatorDiameterMm = 22f, StatorHeightMm = 7f, PopularKvs = new[] { 1750f, 1950f, 2150f, 2450f, 2750f } },
             new MotorSizePreset { Name = "2306 (5\" Smooth)", StatorDiameterMm = 23f, StatorHeightMm = 6f, PopularKvs = new[] { 1750f, 1950f, 2450f } },
-            new MotorSizePreset { Name = "2806.5 (7\" Long Range)", StatorDiameterMm = 28f, StatorHeightMm = 6.5f, PopularKvs = new[] { 1300f, 1500f, 1700f } },
-            new MotorSizePreset { Name = "3115 (8-10\" Cinelifter)", StatorDiameterMm = 31f, StatorHeightMm = 15f, PopularKvs = new[] { 900f, 1050f } }
+            new MotorSizePreset { Name = "2507 (5-6\" Speed/Race)", StatorDiameterMm = 25f, StatorHeightMm = 7f, PopularKvs = new[] { 1800f, 2050f, 2350f } },
+            new MotorSizePreset { Name = "2806.5 (7\" Long Range)", StatorDiameterMm = 28f, StatorHeightMm = 6.5f, PopularKvs = new[] { 1300f, 1500f, 1700f, 2050f } },
+            new MotorSizePreset { Name = "3115 (8-10\" Cinelifter)", StatorDiameterMm = 31f, StatorHeightMm = 15f, PopularKvs = new[] { 900f, 1050f, 1350f } }
         };
 
         public static readonly LipoPreset[] PopularLipos =
@@ -338,9 +340,12 @@ namespace FPVDrone
             Vector3 inertia = new Vector3(ixx, iyy, ixx);
 
             // Aerodynamic drag areas (Cd * A in m^2)
-            float dragTangential = 0.0020f + (halfSpanM * halfSpanM) * 0.65f;
-            float dragLateral = dragTangential * 1.85f;
-            float dragNormal = dragTangential * 3.80f;
+            // Scaled from frame/battery cross-section (frameRadiusM) plus duct area,
+            // rather than treating the open prop disc area as a solid flat plate.
+            float ductDrag = isDucted ? (halfSpanM * halfSpanM) * 0.35f : 0f;
+            float dragTangential = 0.0010f + (frameRadiusM * frameRadiusM) * 0.36f + ductDrag;
+            float dragLateral = dragTangential * 1.45f;
+            float dragNormal = dragTangential * 2.25f;
 
             // Propeller thrust & power coefficients
             float pitchRatio = Mathf.Clamp(propPitchInches / propInches, 0.45f, 1.25f);
@@ -385,7 +390,7 @@ namespace FPVDrone
             float reqCurrentPerMotor = elecPowerPerMotor / Mathf.Max(2.5f, fullVolt);
 
             // Stator current ceiling prevents tiny motors from abusing oversized ESCs on large props
-            float motorMaxAmps = 48.0f * Mathf.Pow(statorVol / 3388.0f, 0.72f);
+            float motorMaxAmps = 56.0f * Mathf.Pow(statorVol / 3388.0f, 0.72f);
             float effectiveCurrentLimit = Mathf.Min(escAmps, motorMaxAmps);
             bool isEscLimited = reqCurrentPerMotor > escAmps && escAmps <= motorMaxAmps;
 
@@ -409,6 +414,14 @@ namespace FPVDrone
 
             // Pitch speed: V_pitch = n * pitch_m
             float pitchSpeedMax = nMax * propPitchM;
+            float linearRotorDrag = Mathf.Clamp(0.030f * (propDiamM / 0.12954f), 0.006f, 0.060f);
+            float estMaxSpeedMps = EstimateMaxLevelSpeedMps(
+                maxThrustTotal,
+                massKg,
+                dragNormal,
+                dragTangential,
+                linearRotorDrag,
+                pitchSpeedMax);
 
             // Motor spool time constant (seconds): prop inertia / motor torque
             float propInertiaIndex = Mathf.Pow(propInches / 5.1f, 3.2f);
@@ -458,7 +471,7 @@ namespace FPVDrone
                 DragNormal = dragNormal,
                 DragTangential = dragTangential,
                 DragLateral = dragLateral,
-                LinearRotorDrag = Mathf.Clamp(0.030f * (propDiamM / 0.12954f), 0.006f, 0.060f),
+                LinearRotorDrag = linearRotorDrag,
                 GroundEffectMaxAltM = propDiamM * 2.5f,
                 PropCt = ct,
                 PropCp = cp,
@@ -478,6 +491,7 @@ namespace FPVDrone
                 HoverThrottle01 = hoverThrottle,
                 PeakCurrentAmps = peakCurrentTotal,
                 PitchSpeedMaxMps = pitchSpeedMax,
+                EstMaxSpeedMps = estMaxSpeedMps,
                 MotorSpoolTau = motorSpoolTau,
                 RollPitchWn = rollPitchWn,
                 YawWn = yawWn,
@@ -488,6 +502,61 @@ namespace FPVDrone
                 AudioMinDistance = Mathf.Clamp(2.8f * acousticScale, 1.0f, 4.5f),
                 AudioMaxDistance = Mathf.Clamp(150.0f * acousticScale, 28.0f, 220.0f)
             };
+        }
+
+        private static float EstimateMaxLevelSpeedMps(
+            float maxThrustTotal,
+            float massKg,
+            float dragNormal,
+            float dragTangential,
+            float linearRotorDrag,
+            float pitchSpeedMaxMps)
+        {
+            if (maxThrustTotal <= massKg * 9.81f || pitchSpeedMaxMps <= 1f)
+                return 0f;
+
+            float weightN = massKg * 9.81f;
+            float low = 0f;
+            float high = pitchSpeedMaxMps;
+
+            for (int iter = 0; iter < 18; iter++)
+            {
+                float v = 0.5f * (low + high);
+                bool achievable = false;
+
+                for (int deg = 5; deg <= 85; deg += 2)
+                {
+                    float rad = deg * Mathf.Deg2Rad;
+                    float sinT = Mathf.Sin(rad);
+                    float cosT = Mathf.Cos(rad);
+
+                    float vz = v * cosT;
+                    float vy = v * sinT;
+
+                    float inflow = Mathf.Clamp01(1f - vy / (pitchSpeedMaxMps * 1.08f));
+                    float thrust = maxThrustTotal * inflow;
+
+                    float dy = 0.5f * DronePhysics.AirDensity * dragNormal * vy * vy;
+                    float dz = 0.5f * DronePhysics.AirDensity * dragTangential * vz * vz;
+                    float hz = linearRotorDrag * weightN * vz;
+
+                    float fUp = (thrust - dy) * cosT + (dz + hz) * sinT - weightN;
+                    float fFwd = (thrust - dy) * sinT - (dz + hz) * cosT;
+
+                    if (fUp >= 0f && fFwd >= 0f)
+                    {
+                        achievable = true;
+                        break;
+                    }
+                }
+
+                if (achievable)
+                    low = v;
+                else
+                    high = v;
+            }
+
+            return low;
         }
     }
 }

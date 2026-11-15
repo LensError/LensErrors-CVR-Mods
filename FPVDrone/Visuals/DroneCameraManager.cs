@@ -135,7 +135,7 @@ namespace FPVDrone
 
         private static int GetCullingMaskForDroneMesh(bool showDrone)
         {
-            const int baseMask = ~((1 << 5) | (1 << 9) | (1 << 15));
+            const int baseMask = ~((1 << 5) | (1 << 9) | (1 << 15) | (1 << DroneMeshRenderer.DroneDiscardLayer));
             int droneBit = 1 << DroneMeshRenderer.DroneMeshLayer;
             return showDrone ? baseMask : (baseMask & ~droneBit);
         }

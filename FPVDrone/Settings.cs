@@ -134,6 +134,7 @@ namespace FPVDrone
         private const string CategoryName = "FPVDrone";
 
         // Hardware & Controller Selection
+        public static MelonPreferences_Entry<bool> ModEnabled;
         public static MelonPreferences_Entry<ControllerDevice> InputDevice;
         public static MelonPreferences_Entry<StickMode> ControlStickMode;
         public static MelonPreferences_Entry<bool> GamepadTriggerThrottle;
@@ -241,6 +242,12 @@ namespace FPVDrone
         public static MelonPreferences_Entry<bool> OsdShowCrosshair;
         public static MelonPreferences_Entry<bool> OsdShowTimers;
         public static MelonPreferences_Entry<bool> ShowDroneMeshInFpv;
+        public static MelonPreferences_Entry<bool> AutoBindDroneProp;
+        public static MelonPreferences_Entry<bool> AutoSpawnDroneProp;
+        public static MelonPreferences_Entry<string> DronePropGuid;
+        public static MelonPreferences_Entry<bool> SuppressIndicatorWhenPropBound;
+        public static MelonPreferences_Entry<bool> DebugHearPropAudio;
+        public static MelonPreferences_Entry<bool> DisableCollisions;
 
         // Keybinds
         public static MelonPreferences_Entry<KeyCode> ArmKey;
@@ -292,6 +299,7 @@ namespace FPVDrone
         {
             var category = MelonPreferences.CreateCategory(CategoryName, "FPV Drone");
 
+            ModEnabled = category.CreateEntry("ModEnabled", false, "Enable FPV Drone Mod");
             Mode = category.CreateEntry("FlightMode", FlightMode.Acro, "Flight Mode (Acro, Angle, PositionHold)");
             ActivePreset = category.CreateEntry("ActivePreset", DronePreset.Freestyle5Inch, "Active Drone Hardware Preset");
             InputDevice = category.CreateEntry("InputDevice", ControllerDevice.Auto, "Preferred Input Controller Device (Auto, Radio, Gamepad, Keyboard)");
@@ -402,6 +410,12 @@ namespace FPVDrone
             OsdShowCrosshair = category.CreateEntry("OsdShowCrosshair", true, "Show Center Crosshair on OSD");
             OsdShowTimers = category.CreateEntry("OsdShowTimers", true, "Show Flight Timers, Battery, and Speed/Alt on OSD");
             ShowDroneMeshInFpv = category.CreateEntry("ShowDroneMeshInFpv", true, "Show 3D Frame Arms & Spinning Props in FPV View");
+            AutoBindDroneProp = category.CreateEntry("AutoBindDroneProp", true, "Auto-Bind Spawned Drone CVRSpawnable Prop");
+            AutoSpawnDroneProp = category.CreateEntry("AutoSpawnDroneProp", false, "Auto-Spawn Drone Prop on Arm (if permitted)");
+            DronePropGuid = category.CreateEntry("DronePropGuid", "5eeb9775-3a6d-41e4-a0e8-8e0c70ff7d17", "Drone Prop CVR Content GUID");
+            SuppressIndicatorWhenPropBound = category.CreateEntry("SuppressIndicatorWhenPropBound", true, "Hide CVR Camera Indicator When Prop Is Bound");
+            DebugHearPropAudio = category.CreateEntry("DebugHearPropAudio", false, "Debug: Hear Prop Audio Instead of Mod Audio");
+            DisableCollisions = category.CreateEntry("DisableCollisions", false, "Disable World Collisions (Noclip)");
 
             ArmKey = category.CreateEntry("ArmKey", KeyCode.F6, "Arm / Disarm Toggle Key");
             MenuKey = category.CreateEntry("MenuKey", KeyCode.F7, "Configurator Menu Key");

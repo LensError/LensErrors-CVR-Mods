@@ -59,9 +59,10 @@ namespace FPVDrone
 
         // Reusable corner buffer for multi-point floor contact
         private readonly Vector3[] _contactPointsLocal = new Vector3[8];
+        private readonly Collider[] _overlapBuffer = new Collider[8];
 
-        // Layer mask for world collisions (Excludes UI, PlayerClone, UIInternal)
-        public static readonly int WorldCollisionMask = ~((1 << 5) | (1 << 9) | (1 << 15));
+        // Layer mask for world collisions (Excludes UI, PlayerClone, UIInternal, DroneMeshLayer, DroneDiscardLayer)
+        public static readonly int WorldCollisionMask = ~((1 << 5) | (1 << 9) | (1 << 15) | (1 << DroneMeshRenderer.DroneMeshLayer) | (1 << DroneMeshRenderer.DroneDiscardLayer));
 
         public static float CalculateHoverThrottle(float twr)
         {
@@ -528,7 +529,8 @@ namespace FPVDrone
             axialInflowFactor = 1.0f;
             if (bodyAxialSpeed > 0.0f && hw.PitchSpeedMaxMps > 1.0f)
             {
-                axialInflowFactor = Mathf.Clamp01(1.0f - (bodyAxialSpeed / hw.PitchSpeedMaxMps));
+                // Account for ~8% dynamic prop unloading at high forward airspeed
+                axialInflowFactor = Mathf.Clamp01(1.0f - (bodyAxialSpeed / (hw.PitchSpeedMaxMps * 1.08f)));
             }
 
             etlLiftMultiplier = 1.0f;
@@ -719,54 +721,104 @@ namespace FPVDrone
 
         private void ApplyMovementWithCollision(DroneHardwareSpec hw, float dt)
         {
-            Vector3 deltaMove = LinearVelocity * dt;
-
-            // Step 1: Swept oriented BoxCast for obstacles & walls (flat quadcopter profile, not a giant sphere)
-            float moveDist = deltaMove.magnitude;
-            if (moveDist > 0.0001f)
+            if (Settings.DisableCollisions != null && Settings.DisableCollisions.Value)
             {
-                Vector3 direction = deltaMove / moveDist;
-                Vector3 boxHalfExtents = new Vector3(
-                    hw.HalfSpanM * 0.90f,
-                    (hw.BellyHeightM + hw.TopHeightM) * 0.45f,
-                    hw.HalfSpanM * 0.90f
-                );
+                Position += LinearVelocity * dt;
+                IsOnGround = false;
+                return;
+            }
 
-                if (Physics.BoxCast(Position, boxHalfExtents, direction, out RaycastHit hit, Rotation, moveDist, WorldCollisionMask, QueryTriggerInteraction.Ignore))
+            Vector3 remainingMove = LinearVelocity * dt;
+            Vector3 boxHalfExtents = new Vector3(
+                hw.HalfSpanM * 0.90f,
+                (hw.BellyHeightM + hw.TopHeightM) * 0.45f,
+                hw.HalfSpanM * 0.90f
+            );
+
+            // Step 1: 2-pass swept BoxCast + thin-core SphereCast (0.025m) so single-sided MeshColliders
+            // are still caught even when the outer box starts overlapping a thin wall.
+            for (int iter = 0; iter < 2; iter++)
+            {
+                float moveDist = remainingMove.magnitude;
+                if (moveDist <= 0.0001f)
+                    break;
+
+                Vector3 direction = remainingMove / moveDist;
+                bool hasBoxHit = Physics.BoxCast(Position, boxHalfExtents, direction, out RaycastHit boxHit, Rotation, moveDist, WorldCollisionMask, QueryTriggerInteraction.Ignore);
+                bool hasCoreHit = Physics.SphereCast(Position, 0.025f, direction, out RaycastHit coreHit, moveDist, WorldCollisionMask, QueryTriggerInteraction.Ignore);
+
+                if (!hasBoxHit && !hasCoreHit)
                 {
-                    if (hit.distance > 0.0001f)
-                    {
-                        Position += direction * hit.distance + hit.normal * 0.003f;
-                    }
-                    else
-                    {
-                        Position += hit.normal * 0.004f;
-                    }
+                    Position += remainingMove;
+                    break;
+                }
 
-                    Vector3 normal = hit.normal;
-                    float vNorm = Vector3.Dot(LinearVelocity, normal);
-                    if (vNorm < 0.0f)
-                    {
-                        if (-vNorm > 1.5f)
-                        {
-                            OnCollisionImpact?.Invoke(-vNorm);
-                        }
+                RaycastHit hit;
+                if (hasBoxHit && hasCoreHit)
+                    hit = coreHit.distance < boxHit.distance ? coreHit : boxHit;
+                else
+                    hit = hasCoreHit ? coreHit : boxHit;
 
-                        Vector3 contactOffset = hit.point != Vector3.zero
-                            ? (hit.point - Position)
-                            : (-direction * hw.HalfSpanM);
-
-                        ApplyRigidBodyImpulse(hw, contactOffset, normal, hw.CollisionRestitution, 0.25f);
-
-                        if (-vNorm > 4.5f && !hw.IsDucted)
-                        {
-                            IsCrashed = true;
-                        }
-                    }
+                float traveled = Mathf.Max(0.0f, hit.distance);
+                if (traveled > 0.0001f)
+                {
+                    Position += direction * traveled + hit.normal * 0.003f;
                 }
                 else
                 {
-                    Position += deltaMove;
+                    Position += hit.normal * 0.004f;
+                }
+
+                Vector3 normal = hit.normal;
+                float vNorm = Vector3.Dot(LinearVelocity, normal);
+                if (vNorm < 0.0f)
+                {
+                    if (-vNorm > 1.5f)
+                    {
+                        OnCollisionImpact?.Invoke(-vNorm);
+                    }
+
+                    Vector3 contactOffset = hit.point != Vector3.zero
+                        ? (hit.point - Position)
+                        : (-direction * hw.HalfSpanM);
+
+                    ApplyRigidBodyImpulse(hw, contactOffset, normal, hw.CollisionRestitution, 0.25f);
+
+                    if (-vNorm > 4.5f && !hw.IsDucted)
+                    {
+                        IsCrashed = true;
+                    }
+                }
+
+                float leftDist = Mathf.Max(0.0f, moveDist - traveled);
+                remainingMove = Vector3.ProjectOnPlane(direction * leftDist, normal);
+            }
+
+            // Step 1b: Depenetrate against overlapping convex/primitive colliders
+            int overlapCount = Physics.OverlapBoxNonAlloc(Position, boxHalfExtents * 0.85f, _overlapBuffer, Rotation, WorldCollisionMask, QueryTriggerInteraction.Ignore);
+            if (overlapCount > 0)
+            {
+                Vector3 push = Vector3.zero;
+                for (int i = 0; i < overlapCount; i++)
+                {
+                    Collider col = _overlapBuffer[i];
+                    if (col == null) continue;
+                    // ComputePenetration requires a collider on this object; approximate via ClosestPoint for convex/primitives
+                    if (col is BoxCollider || col is SphereCollider || col is CapsuleCollider || (col is MeshCollider mc && mc.convex))
+                    {
+                        Vector3 closest = col.ClosestPoint(Position);
+                        Vector3 diff = Position - closest;
+                        float dist = diff.magnitude;
+                        float minClearance = 0.025f;
+                        if (dist > 1e-5f && dist < minClearance)
+                        {
+                            push += (diff / dist) * (minClearance - dist);
+                        }
+                    }
+                }
+                if (push.sqrMagnitude > 1e-8f)
+                {
+                    Position += Vector3.ClampMagnitude(push, 0.05f);
                 }
             }
 

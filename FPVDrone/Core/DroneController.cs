@@ -19,12 +19,14 @@ namespace FPVDrone
         private DroneCameraManager _cameraManager;
         private DroneVTXSimulation _vtx;
         private DroneNetworkSync _networkSync;
+        private DronePropSync _propSync;
         private DroneOSD _osd;
         private DroneConfigMenu _configMenu;
         private DroneMeshRenderer _meshRenderer;
         private Spout.SpoutManager _spout;
 
         public Spout.SpoutManager Spout => _spout;
+        public DronePropSync PropSync => _propSync;
 
         private bool _isArmed = false;
         private Vector3 _pilotTakeoffPosition = Vector3.zero;
@@ -46,6 +48,7 @@ namespace FPVDrone
             _cameraManager = new DroneCameraManager();
             _vtx = new DroneVTXSimulation();
             _networkSync = new DroneNetworkSync();
+            _propSync = new DronePropSync();
             _osd = new DroneOSD();
             _configMenu = new DroneConfigMenu();
             _meshRenderer = new DroneMeshRenderer();
@@ -56,9 +59,10 @@ namespace FPVDrone
             _osd.Initialize();
             _configMenu.Initialize(_input);
             _meshRenderer.Initialize();
+            _meshRenderer.SetVisible(false);
 
             _spout.OnSpoutStateChanged += HandleSpoutStateChanged;
-            if (Settings.EnableSpout.Value)
+            if (Settings.ModEnabled.Value && Settings.EnableSpout.Value)
             {
                 _spout.StartSpout();
             }
@@ -93,6 +97,7 @@ namespace FPVDrone
             }
 
             _input.ReleaseAllLocks();
+            _propSync?.Unbind();
             _audio.Destroy();
             _cameraManager.Destroy();
             _osd.Destroy();
@@ -105,6 +110,9 @@ namespace FPVDrone
 
         private void Update()
         {
+            if (!Settings.ModEnabled.Value)
+                return;
+
             // 1. Immediate exit from flight mode via Tab or Escape
             if (_isArmed && (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab)))
             {
@@ -161,8 +169,25 @@ namespace FPVDrone
                 _input.Yaw
             );
 
-            // 4. Update visual drone mesh, camera rig & OSD telemetry
-            _meshRenderer?.UpdateVisual(_physics.Position, _physics.Rotation, _physics.MotorRpms, _isArmed, dt);
+            // 4. Update bound CVRSpawnable prop (while armed or already bound) or procedural fallback mesh (only while armed / Spout active)
+            float wheelbaseMm = DroneBuilder.EvaluateCurrent().WheelbaseMm;
+            bool spoutActive = _spout != null && _spout.IsSpoutActive;
+            bool propBound = _propSync != null && (_isArmed || _propSync.IsBound) && _propSync.UpdateSync(
+                _physics.Position,
+                _physics.Rotation,
+                _isArmed,
+                _physics.CurrentThrottle01,
+                wheelbaseMm,
+                dt);
+
+            if (propBound || (!_isArmed && !spoutActive))
+            {
+                _meshRenderer?.SetVisible(false);
+            }
+            else
+            {
+                _meshRenderer?.UpdateVisual(_physics.Position, _physics.Rotation, _physics.MotorRpms, _isArmed, dt);
+            }
 
             if (_isArmed || (_spout != null && _spout.IsSpoutActive))
             {
@@ -172,7 +197,22 @@ namespace FPVDrone
             if (_isArmed)
             {
                 _vtx.UpdateSimulation(_physics.Position, _pilotTakeoffPosition, _physics.BatteryVoltage, dt);
-                _networkSync.UpdateSync(_physics.Position, _physics.Rotation);
+                bool suppressIndicator = propBound && Settings.SuppressIndicatorWhenPropBound.Value;
+                if (suppressIndicator)
+                {
+                    if (DroneNetworkSync.IsSyncing)
+                    {
+                        _networkSync.StopSyncing();
+                    }
+                }
+                else
+                {
+                    if (!DroneNetworkSync.IsSyncing)
+                    {
+                        _networkSync.StartSyncing();
+                    }
+                    _networkSync.UpdateSync(_physics.Position, _physics.Rotation);
+                }
                 _osd.UpdateFlightStats(dt, _physics);
             }
             else
@@ -180,7 +220,8 @@ namespace FPVDrone
                 _osd.TickPostFlightSummary(dt);
             }
 
-            // 5. Update 3D spatial audio & low-battery beeper
+            // 5. Update 3D spatial audio & low-battery beeper (muted if DebugHearPropAudio is active with a bound prop)
+            bool muteModAudio = propBound && Settings.DebugHearPropAudio.Value;
             _audio.UpdateAudio(
                 _physics.Position,
                 _physics.Rotation,
@@ -192,13 +233,16 @@ namespace FPVDrone
                 _physics.GForceLoad,
                 _physics.BatteryCurrentAmps,
                 _physics.IsInPropWash,
-                _isArmed
+                _isArmed && !muteModAudio
             );
-            _audio.UpdateLowBatteryBeeper(dt, _physics.BatteryVoltage, Settings.BatteryCells.Value, _isArmed);
+            _audio.UpdateLowBatteryBeeper(dt, _physics.BatteryVoltage, Settings.BatteryCells.Value, _isArmed && !muteModAudio);
         }
 
         private void OnGUI()
         {
+            if (!Settings.ModEnabled.Value)
+                return;
+
             bool isVr = MetaPort.Instance != null && MetaPort.Instance.isUsingVr;
 
             // In Desktop mode, draw the FPV camera feed full-screen (with barrel distortion when enabled)
@@ -259,8 +303,32 @@ namespace FPVDrone
             MelonLoader.MelonPreferences.Save();
         }
 
+        public void SetModEnabled(bool enabled)
+        {
+            if (Settings.ModEnabled.Value != enabled)
+            {
+                Settings.ModEnabled.Value = enabled;
+                MelonLoader.MelonPreferences.Save();
+            }
+
+            if (!enabled)
+            {
+                Disarm();
+                _propSync?.Unbind();
+                _meshRenderer?.SetVisible(false);
+                if (_configMenu != null && _configMenu.IsOpen)
+                {
+                    _configMenu.SetOpen(false);
+                }
+                _input?.ReleaseAllLocks();
+            }
+        }
+
         public void ToggleArm()
         {
+            if (!Settings.ModEnabled.Value)
+                return;
+
             if (_isArmed)
             {
                 Disarm();
@@ -273,17 +341,21 @@ namespace FPVDrone
 
         public void OpenConfigMenu()
         {
+            if (!Settings.ModEnabled.Value)
+                return;
             _configMenu?.SetOpen(true);
         }
 
         public void ToggleConfigMenu()
         {
+            if (!Settings.ModEnabled.Value)
+                return;
             _configMenu?.ToggleMenu();
         }
 
         public void Arm()
         {
-            if (_isArmed)
+            if (_isArmed || !Settings.ModEnabled.Value)
                 return;
 
             // Automatically close QuickMenu and Main Menu so flight begins cleanly without UI obstruction
@@ -296,8 +368,19 @@ namespace FPVDrone
             ResetDroneToPlayer();
 
             _isArmed = true;
+            if (Settings.AutoBindDroneProp.Value)
+            {
+                bool bound = _propSync != null && _propSync.TryAutoBind(false);
+                if (!bound && Settings.AutoSpawnDroneProp.Value)
+                {
+                    _propSync?.TrySpawnProp(_physics.Position);
+                }
+            }
             _cameraManager.SetFlightActive(true);
-            _networkSync.StartSyncing();
+            if (!(_propSync != null && _propSync.IsBound && Settings.SuppressIndicatorWhenPropBound.Value))
+            {
+                _networkSync.StartSyncing();
+            }
             _osd.ResetTimer();
             _audio.PlayArmBeep();
         }
@@ -380,9 +463,50 @@ namespace FPVDrone
             }
         }
 
+        public void SpawnDroneProp()
+        {
+            if (_propSync == null)
+                return;
+
+            Vector3 spawnPos = _physics.Position;
+            if (!_isArmed)
+            {
+                var player = PlayerSetup.Instance;
+                if (player != null && player.activeCam != null)
+                {
+                    Vector3 fwd = Vector3.ProjectOnPlane(player.activeCam.transform.forward, Vector3.up).normalized;
+                    if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
+                    spawnPos = player.activeCam.transform.position + fwd * 1.5f;
+                }
+            }
+
+            _propSync.TrySpawnProp(spawnPos, ignoreCooldown: true);
+        }
+
+        public void BindPropAuto()
+        {
+            if (_propSync == null)
+                return;
+
+            if (_propSync.TryAutoBind(fallbackToLatestIfNoFpvParams: true))
+            {
+                MelonLoader.MelonLogger.Msg($"[FPVDrone] Manually bound prop '{_propSync.BoundName}'.");
+            }
+            else
+            {
+                MelonLoader.MelonLogger.Warning("[FPVDrone] No spawned CVRSpawnable props owned by you were found.");
+            }
+        }
+
+        public void UnbindProp()
+        {
+            _propSync?.Unbind();
+        }
+
         public void OnWorldUnload()
         {
             Disarm();
+            _propSync?.Unbind();
         }
     }
 }

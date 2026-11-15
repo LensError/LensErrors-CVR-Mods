@@ -481,6 +481,7 @@ namespace FPVDrone
             physics.Rows.Add(Rows.Float("Snap Wobble", Settings.SnapWobbleStrength, 0.05f, 0.0f, 2.0f, Pct, "Motor-inertia wobble after hard stick stops."));
             physics.Rows.Add(Rows.Bool("Translational Lift", Settings.EnableTranslationalLift, "Effective translational lift and inflow pitch-up in forward flight."));
             physics.Rows.Add(Rows.Bool("Motor Saturation", Settings.EnableMotorSaturation, "Mixer RPM saturation and yaw washout at full throttle."));
+            physics.Rows.Add(Rows.Bool("World Collisions", Settings.DisableCollisions, "Disable all collider hits so the drone flies through walls and floors.", "DISABLED (NOCLIP)", "ENABLED"));
             physics.Rows.Add(Rows.Section("Battery Simulation"));
             physics.Rows.Add(Rows.Bool("LiPo Depletion", Settings.SimulateBatteryDepletion, "Drain the pack over time and enter limp mode when empty."));
             physics.Rows.Add(Rows.Bool("Voltage Sag", Settings.EnableVoltageSag, "Voltage drops under high throttle, reducing power and OSD voltage."));
@@ -1454,6 +1455,7 @@ namespace FPVDrone
             SpecRow("Max Thrust / TWR", $"{hw.MaxThrustNewtons:F1} N  ({hw.ThrustToWeightRatio:F1}:1)", hw.ThrustToWeightRatio >= 2.0f ? ConfigTheme.Text : ConfigTheme.Red);
             SpecRow("Hover Throttle", $"{hw.HoverThrottle01 * 100f:F0}%", ConfigTheme.Text);
             SpecRow("Loaded Max RPM", $"{hw.MaxLoadedRpm:F0} RPM", ConfigTheme.Text);
+            SpecRow("Est. Max Speed", $"{hw.EstMaxSpeedMps * 3.6f:F0} km/h", ConfigTheme.Text);
             SpecRow("Prop Pitch Speed", $"{hw.PitchSpeedMaxMps * 3.6f:F0} km/h", ConfigTheme.Text);
             SpecRow("Audio Blade-Pass", $"{hw.MaxBladePassF0:F0} Hz peak", ConfigTheme.Text);
 
