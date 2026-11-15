@@ -1,6 +1,7 @@
 # FPV Drone
 
 [![Download](https://img.shields.io/badge/Download-Latest-blue?style=for-the-badge)](https://github.com/LensError/lenserrors-cvr-mods/releases/latest/download/FPVDrone.dll)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/3mA55eQZrR)
 
 FPV drone flight mod for ChilloutVR. Accessed from the `FPV Drone` Quick Menu tab or `F6` / `F7`.
 
@@ -31,3 +32,6 @@ FPV drone flight mod for ChilloutVR. Accessed from the `FPV Drone` Quick Menu ta
 | ![Video & Audio](img/config_video_audio.jpg) | |
 
 </details>
+
+## Community
+Join the [Discord](https://discord.gg/3mA55eQZrR) to share your builds and clips, report bugs, and suggest new features!
