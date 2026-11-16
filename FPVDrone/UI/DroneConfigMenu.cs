@@ -24,6 +24,8 @@ namespace FPVDrone
         }
 
         // Layout (virtual units, scaled to the screen)
+        public const float TabletWidth = PanelW;
+        public const float TabletHeight = PanelH;
         private const float PanelW = 1060f;
         private const float PanelH = 680f;
         private const float HeaderH = 46f;
@@ -325,7 +327,12 @@ namespace FPVDrone
 
         private static string VrViewName(VrViewMode m)
         {
-            return m == VrViewMode.Stereo3D ? "3D STEREO" : "2D GOGGLES";
+            switch (m)
+            {
+                case VrViewMode.Stereo3D: return "3D GOGGLES";
+                case VrViewMode.CockpitVR3D: return "FULL 3D VR";
+                default: return "2D GOGGLES";
+            }
         }
 
         private static string GimbalModeName(SpoutGimbalMode m)
@@ -523,9 +530,14 @@ namespace FPVDrone
             video.Rows.Add(Rows.Bool("RF Static", Settings.EnableVtxStatic, "Simulate VTX signal degradation based on range and obstacles."));
             video.Rows.Add(Rows.Float("Noise Amount", Settings.VtxNoiseStrength, 0.05f, 0.0f, 2.0f, Pct, "VTX artifact intensity multiplier.", () => Settings.EnableVtxStatic.Value));
             video.Rows.Add(Rows.Section("Camera"));
+            video.Rows.Add(Rows.Bool("LOS Fly Mode", Settings.LosFlyMode, "Line-of-Sight flight from your player camera (hides FPV feed and OSD on Desktop & VR).", "LOS (Player View)", "FPV (Goggles)"));
+            video.Rows.Add(Rows.Bool("Desktop LOS Auto-Track", Settings.LosAutoTrackCamera, "Smoothly pan/tilt Desktop camera toward the drone during LOS flight.", "AUTO-TRACK", "FIXED LOOK", () => Settings.LosFlyMode.Value));
             video.Rows.Add(Rows.Float("Camera FOV", Settings.FpvCameraFov, 1f, 75f, 155f, Deg, "FPV lens field of view (wider shows more of the arms and props)."));
             video.Rows.Add(Rows.Bool("Frame in FPV View", Settings.ShowDroneMeshInFpv, "Render the 3D frame arms, ducts, and spinning props in FPV view.", "VISIBLE", "HIDDEN"));
-            video.Rows.Add(Rows.Choice("VR View Mode", Settings.VrView, VrViewName, "2D Goggles: virtual goggle screen. 3D Stereo: full stereoscopic drone view on both VR displays."));
+            video.Rows.Add(Rows.Choice("VR View Mode", Settings.VrView, VrViewName, "2D/3D Goggles: virtual screen with black mask. Full 3D VR: true full-HMD stereoscopic cockpit on drone."));
+            video.Rows.Add(Rows.Bool("Full 3D VR HUD", Settings.CockpitVrShowOsd, "Show translucent head-tracked Betaflight OSD overlay in Full 3D VR view.", "HUD ON", "HUD OFF", () => Settings.VrView.Value == VrViewMode.CockpitVR3D));
+            video.Rows.Add(Rows.Float("VR Goggle FOV", Settings.VrGoggleScreenFov, 2f, 35f, 110f, Deg, "Angular size of the virtual FPV goggle screen inside the VR headset.", () => Settings.VrView.Value != VrViewMode.CockpitVR3D));
+            video.Rows.Add(Rows.Float("VR Stereo IPD", Settings.VrStereoIpdMm, 1f, 40f, 85f, v => F0(v) + " mm", "Left/right drone camera separation in VR 3D Goggles mode.", () => Settings.VrView.Value == VrViewMode.Stereo3D));
             video.Rows.Add(Rows.Choice("FPV Resolution", Settings.FpvCameraResolution, ResolutionName, "FPV camera render resolution (applies to goggles, desktop view, and Raw FPV Spout output)."));
             video.Rows.Add(Rows.Bool("Fisheye Lens", Settings.EnableLensDistortion, "Ultra-wide barrel distortion."));
             video.Rows.Add(Rows.Float("Distortion Factor", Settings.LensDistortionK, 0.01f, 0.0f, 0.50f, F2, "Barrel distortion strength (k).", () => Settings.EnableLensDistortion.Value));
@@ -960,7 +972,88 @@ namespace FPVDrone
             }
         }
 
-        private void DrawPanel(float vw, float vh)
+        private readonly Event _vrSynthEvent = new Event();
+
+        public void DrawMenuToRenderTexture(
+            RenderTexture targetRt,
+            Vector2 pointerPos,
+            bool isHovering,
+            bool pointerDownThisFrame,
+            bool pointerUpThisFrame,
+            bool pointerHeld,
+            float scrollDelta)
+        {
+            if (!IsOpen || _tabs.Count == 0 || targetRt == null)
+                return;
+
+            EnsureStyles();
+
+            if (_dirty && Time.unscaledTime - _lastEdit > SaveDelay)
+                FlushSave();
+
+            RenderTexture prevActive = RenderTexture.active;
+            Matrix4x4 prevMatrix = GUI.matrix;
+            bool prevSrgb = GL.sRGBWrite;
+            Event prevEvent = Event.current;
+
+            try
+            {
+                RenderTexture.active = targetRt;
+                GL.Clear(true, true, ConfigTheme.Panel);
+                GL.sRGBWrite = QualitySettings.activeColorSpace == ColorSpace.Linear;
+                GUI.matrix = Matrix4x4.identity;
+
+                Vector2 activePointer = isHovering ? pointerPos : new Vector2(-1000f, -1000f);
+
+                if (isHovering && pointerDownThisFrame)
+                    DispatchTabletPass(EventType.MouseDown, 0, activePointer, Vector2.zero);
+
+                if (pointerHeld && !pointerDownThisFrame)
+                    DispatchTabletPass(EventType.MouseDrag, 0, activePointer, Vector2.zero);
+
+                if (pointerUpThisFrame)
+                    DispatchTabletPass(EventType.MouseUp, 0, activePointer, Vector2.zero);
+
+                if (isHovering && Mathf.Abs(scrollDelta) > 0.01f)
+                    DispatchTabletPass(EventType.ScrollWheel, 0, activePointer, new Vector2(0f, scrollDelta));
+
+                DispatchTabletPass(EventType.Repaint, 0, activePointer, Vector2.zero);
+
+                if (isHovering && IsOpen)
+                {
+                    DrawTex(new Rect(pointerPos.x - 6f, pointerPos.y - 6f, 12f, 12f), _circleTex,
+                        pointerHeld ? ConfigTheme.White : ConfigTheme.Accent);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ex.Message != _lastError)
+                {
+                    _lastError = ex.Message;
+                    MelonLogger.Error("[Config] VR tablet draw failed: " + ex);
+                }
+            }
+            finally
+            {
+                Event.current = prevEvent;
+                GUI.matrix = prevMatrix;
+                GL.sRGBWrite = prevSrgb;
+                RenderTexture.active = prevActive;
+            }
+        }
+
+        private void DispatchTabletPass(EventType type, int button, Vector2 mousePos, Vector2 delta)
+        {
+            if (!IsOpen) return;
+            _vrSynthEvent.type = type;
+            _vrSynthEvent.button = button;
+            _vrSynthEvent.mousePosition = mousePos;
+            _vrSynthEvent.delta = delta;
+            Event.current = _vrSynthEvent;
+            DrawPanel(PanelW, PanelH, type == EventType.Repaint);
+        }
+
+        private void DrawPanel(float vw, float vh, bool runNav = true)
         {
             Event ev = Event.current;
             float left = Mathf.Round((vw - PanelW) * 0.5f);
@@ -982,7 +1075,7 @@ namespace FPVDrone
 
             _mouseInContent = content.Contains(ev.mousePosition);
 
-            HandleNavigation();
+            if (runNav) HandleNavigation();
             if (!IsOpen) return;
 
             // Backgrounds: flat tonal blocks, no outlines

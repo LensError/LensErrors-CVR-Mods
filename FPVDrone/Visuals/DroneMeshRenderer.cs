@@ -75,7 +75,7 @@ namespace FPVDrone
                 RebuildMesh(hw);
             }
 
-            bool showAny = !isArmed || Settings.ShowDroneMeshInFpv.Value || (DroneController.Instance?.Spout?.IsSpoutActive ?? false);
+            bool showAny = !isArmed || Settings.LosFlyMode.Value || Settings.ShowDroneMeshInFpv.Value || (DroneController.Instance?.Spout?.IsSpoutActive ?? false);
             _root.SetActive(showAny);
             _root.transform.SetPositionAndRotation(pos, rot);
 

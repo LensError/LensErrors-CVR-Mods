@@ -2,6 +2,7 @@ using ABI.CCK.Components;
 using ABI_RC.Core.InteractionSystem;
 using ABI_RC.Core.Player;
 using ABI_RC.Core.Savior;
+using ABI_RC.Core.UI;
 using UnityEngine;
 
 namespace FPVDrone
@@ -22,6 +23,7 @@ namespace FPVDrone
         private DronePropSync _propSync;
         private DroneOSD _osd;
         private DroneConfigMenu _configMenu;
+        private UI.VrConfigTablet _vrTablet;
         private DroneMeshRenderer _meshRenderer;
         private Spout.SpoutManager _spout;
 
@@ -30,6 +32,9 @@ namespace FPVDrone
 
         private bool _isArmed = false;
         private Vector3 _pilotTakeoffPosition = Vector3.zero;
+        private bool _losTrackInit = false;
+        private Quaternion _losTrackRot = Quaternion.identity;
+        private Quaternion _preLosLocalRot = Quaternion.identity;
 
         private void Awake()
         {
@@ -51,6 +56,7 @@ namespace FPVDrone
             _propSync = new DronePropSync();
             _osd = new DroneOSD();
             _configMenu = new DroneConfigMenu();
+            _vrTablet = new UI.VrConfigTablet();
             _meshRenderer = new DroneMeshRenderer();
             _spout = new Spout.SpoutManager(Settings.SpoutSenderName.Value);
 
@@ -58,6 +64,7 @@ namespace FPVDrone
             _cameraManager.Initialize();
             _osd.Initialize();
             _configMenu.Initialize(_input);
+            _vrTablet.Initialize();
             _meshRenderer.Initialize();
             _meshRenderer.SetVisible(false);
 
@@ -102,6 +109,7 @@ namespace FPVDrone
             _cameraManager.Destroy();
             _osd.Destroy();
             _configMenu.Destroy();
+            _vrTablet?.Destroy();
             _meshRenderer?.Destroy();
 
             if (Instance == this)
@@ -157,6 +165,10 @@ namespace FPVDrone
             {
                 Settings.CycleFlightMode();
             }
+
+            _osd.TickNotification(Time.unscaledDeltaTime);
+            _cameraManager?.SetConfigMenuOpen(_configMenu.IsOpen);
+            _vrTablet?.UpdateTablet(_configMenu.IsOpen);
 
             // 3. Update physics step
             float dt = Time.deltaTime;
@@ -238,26 +250,77 @@ namespace FPVDrone
             _audio.UpdateLowBatteryBeeper(dt, _physics.BatteryVoltage, Settings.BatteryCells.Value, _isArmed && !muteModAudio);
         }
 
+        private void LateUpdate()
+        {
+            bool isVr = MetaPort.Instance != null && MetaPort.Instance.isUsingVr;
+            bool cvrMenuOpen = (ViewManager.Instance != null && ViewManager.Instance.IsAnyMenuOpen) ||
+                               (CVR_MenuManager.Instance != null && CVR_MenuManager.Instance.IsViewShown);
+
+            if (!_isArmed || !Settings.ModEnabled.Value || !Settings.LosFlyMode.Value ||
+                !Settings.LosAutoTrackCamera.Value || isVr || _configMenu.IsOpen || cvrMenuOpen)
+            {
+                if (_losTrackInit)
+                {
+                    Transform p = PlayerSetup.Instance != null ? PlayerSetup.Instance.desktopCameraPivot : null;
+                    if (p != null)
+                        p.localRotation = _preLosLocalRot;
+                    _losTrackInit = false;
+                }
+                return;
+            }
+
+            Transform pivot = PlayerSetup.Instance != null ? PlayerSetup.Instance.desktopCameraPivot : null;
+            if (pivot == null)
+            {
+                _losTrackInit = false;
+                return;
+            }
+
+            Vector3 toDrone = _physics.Position - pivot.position;
+            if (toDrone.sqrMagnitude < 0.04f)
+                return;
+
+            if (!_losTrackInit)
+            {
+                _preLosLocalRot = pivot.localRotation;
+                _losTrackRot = pivot.rotation;
+                _losTrackInit = true;
+            }
+
+            Quaternion targetRot = Quaternion.LookRotation(toDrone.normalized, Vector3.up);
+            float alpha = 1.0f - Mathf.Exp(-10.0f * Time.unscaledDeltaTime);
+            _losTrackRot = Quaternion.Slerp(_losTrackRot, targetRot, alpha);
+            pivot.rotation = _losTrackRot;
+        }
+
         private void OnGUI()
         {
             if (!Settings.ModEnabled.Value)
                 return;
 
             bool isVr = MetaPort.Instance != null && MetaPort.Instance.isUsingVr;
+            bool losMode = Settings.LosFlyMode.Value;
 
-            // In Desktop mode, draw the FPV camera feed full-screen (with barrel distortion when enabled)
-            if (_isArmed && !isVr)
+            // In Desktop mode (when not in LOS), draw the FPV camera feed full-screen
+            if (_isArmed && !isVr && !losMode)
             {
                 GUI.depth = 100;
                 _cameraManager.DrawDesktopFpvFeed();
             }
 
-            // Draw technical Betaflight OSD overlay for player
-            if (_isArmed)
+            // Draw technical Betaflight OSD overlay for player (hidden in LOS for clean view)
+            if (_isArmed && !losMode)
             {
-                _osd.DrawOSD(_physics, _vtx, _input, _isArmed);
+                if (!isVr)
+                {
+                    _osd.DrawOSD(_physics, _vtx, _input, _isArmed);
+                }
+                else if (Event.current.type == EventType.Repaint)
+                {
+                    _cameraManager.PrepareVrGogglesOsd(_osd, _physics, _vtx, _input);
+                }
             }
-            else
+            else if (!_isArmed)
             {
                 _osd.DrawPostFlightSummary();
             }
@@ -285,10 +348,18 @@ namespace FPVDrone
                 RenderTexture.active = activeBeforeSpout;
             }
 
-            // Draw Pro-FPV Configurator Menu if open
+            // Draw Pro-FPV Configurator Menu if open (world-space VR tablet or desktop overlay)
             if (_configMenu.IsOpen)
             {
-                _configMenu.DrawMenu();
+                if (isVr)
+                {
+                    if (Event.current.type == EventType.Repaint)
+                        _vrTablet?.Render(_configMenu);
+                }
+                else
+                {
+                    _configMenu.DrawMenu();
+                }
             }
         }
 
@@ -383,6 +454,25 @@ namespace FPVDrone
             }
             _osd.ResetTimer();
             _audio.PlayArmBeep();
+            _losTrackInit = false;
+
+            bool isVr = MetaPort.Instance != null && MetaPort.Instance.isUsingVr;
+            if (Settings.LosFlyMode.Value)
+            {
+                string hint = isVr ? "L3 + R3 TO DISARM" : "TAB / ESC TO DISARM";
+                CohtmlHud.Instance?.ViewDropTextImmediate("FPV Drone", "LOS Mode Armed", hint, "fpvdrone-los", false);
+            }
+            else if (isVr)
+            {
+                if (Settings.VrView.Value == VrViewMode.CockpitVR3D && !Settings.CockpitVrShowOsd.Value)
+                {
+                    CohtmlHud.Instance?.ViewDropTextImmediate("FPV Drone", "Full 3D VR Armed", "L3 + R3 TO DISARM   |   A: RESET   X: MODE   R3: FLIP", "fpvdrone-cockpit", false);
+                }
+                else
+                {
+                    _osd.ShowNotification("L3 + R3 TO DISARM   |   A: RESET   X: MODE   R3: FLIP", 4.5f);
+                }
+            }
         }
 
         public void Disarm()
@@ -391,6 +481,7 @@ namespace FPVDrone
                 return;
 
             _isArmed = false;
+            _losTrackInit = false;
             _audio.PlayDisarmBeep();
             _osd.NotifyDisarmSummary(_physics.ConsumedMah);
             _input.ReleaseAllLocks();

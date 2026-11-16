@@ -41,9 +41,85 @@ namespace FPVDrone
                 DroneController.Instance?.ToggleArm();
             };
 
-            category.AddButton("Open Configurator", IconName, "Open the on-screen Pro-FPV Configurator overlay").OnPress += () =>
+            category.AddButton("Open Configurator", IconName, "Open the Pro-FPV Configurator (in-game VR Tablet or Desktop Overlay)").OnPress += () =>
             {
                 DroneController.Instance?.OpenConfigMenu();
+            };
+
+            var vrCategory = page.AddCategory("VR & Quick Flight");
+
+            vrCategory.AddButton("Reset Drone", IconName, "Reset drone upright in front of pilot").OnPress += () =>
+            {
+                DroneController.Instance?.ResetDroneToPlayer();
+            };
+
+            vrCategory.AddButton("Turtle Flip", IconName, "Trigger anti-turtle flip recovery when upside down").OnPress += () =>
+            {
+                DroneController.Instance?.TriggerTurtleFlip();
+            };
+
+            var modeButton = vrCategory.AddButton("Mode: " + Settings.Mode.Value, IconName, "Cycle flight mode (Acro / Angle / Position Hold)");
+            modeButton.OnPress += () =>
+            {
+                Settings.CycleFlightMode();
+                modeButton.ButtonText = "Mode: " + Settings.Mode.Value;
+            };
+
+            var losToggle = vrCategory.AddToggle(
+                "LOS Fly Mode",
+                "Fly Line-of-Sight from your own eyes/camera (Desktop & VR) without FPV goggles or OSD",
+                Settings.LosFlyMode.Value);
+            losToggle.OnValueUpdated += val =>
+            {
+                Settings.LosFlyMode.Value = val;
+                MelonLoader.MelonPreferences.Save();
+            };
+
+            var vrViewButton = vrCategory.AddButton(
+                "VR View: " + GetVrViewLabel(Settings.VrView.Value),
+                IconName,
+                "Cycle VR camera view: 2D Goggles, 3D Goggles, or Full 3D VR cockpit");
+            vrViewButton.OnPress += () =>
+            {
+                Settings.VrView.Value = (VrViewMode)(((int)Settings.VrView.Value + 1) % 3);
+                vrViewButton.ButtonText = "VR View: " + GetVrViewLabel(Settings.VrView.Value);
+                MelonLoader.MelonPreferences.Save();
+            };
+
+            var cockpitHudToggle = vrCategory.AddToggle(
+                "Full 3D VR HUD",
+                "Show translucent head-tracked Betaflight OSD in Full 3D VR view",
+                Settings.CockpitVrShowOsd.Value);
+            cockpitHudToggle.OnValueUpdated += val =>
+            {
+                Settings.CockpitVrShowOsd.Value = val;
+                MelonLoader.MelonPreferences.Save();
+            };
+
+            var goggleFovSlider = vrCategory.AddSlider(
+                "VR Goggle Screen FOV",
+                "Angular size (deg) of the virtual FPV goggle screen inside your headset",
+                Settings.VrGoggleScreenFov.Value,
+                35f,
+                110f,
+                decimalPlaces: 0,
+                defaultValue: 68f,
+                allowReset: true);
+            goggleFovSlider.OnValueUpdated += val =>
+            {
+                Settings.VrGoggleScreenFov.Value = val;
+                MelonLoader.MelonPreferences.Save();
+            };
+
+            page.OnVisibilityChanged += (visible, _) =>
+            {
+                if (!visible) return;
+                modToggle.ToggleValue = Settings.ModEnabled.Value;
+                losToggle.ToggleValue = Settings.LosFlyMode.Value;
+                modeButton.ButtonText = "Mode: " + Settings.Mode.Value;
+                vrViewButton.ButtonText = "VR View: " + GetVrViewLabel(Settings.VrView.Value);
+                cockpitHudToggle.ToggleValue = Settings.CockpitVrShowOsd.Value;
+                goggleFovSlider.SetSliderValue(Settings.VrGoggleScreenFov.Value);
             };
 
             var propCategory = page.AddCategory("Spawnable Prop Sync");
@@ -90,6 +166,16 @@ namespace FPVDrone
                 Settings.DebugHearPropAudio.Value = val;
                 MelonLoader.MelonPreferences.Save();
             };
+        }
+
+        private static string GetVrViewLabel(VrViewMode mode)
+        {
+            switch (mode)
+            {
+                case VrViewMode.Stereo3D: return "3D Goggles";
+                case VrViewMode.CockpitVR3D: return "Full 3D VR";
+                default: return "2D Goggles";
+            }
         }
     }
 }

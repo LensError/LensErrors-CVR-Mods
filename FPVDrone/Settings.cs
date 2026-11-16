@@ -67,7 +67,8 @@ namespace FPVDrone
     public enum VrViewMode
     {
         Goggles2D = 0,
-        Stereo3D = 1
+        Stereo3D = 1,
+        CockpitVR3D = 2
     }
 
     public enum DroneAction
@@ -271,6 +272,11 @@ namespace FPVDrone
         public static MelonPreferences_Entry<float> LensDistortionK;
         public static MelonPreferences_Entry<VideoResolution> FpvCameraResolution;
         public static MelonPreferences_Entry<VrViewMode> VrView;
+        public static MelonPreferences_Entry<float> VrGoggleScreenFov;
+        public static MelonPreferences_Entry<float> VrStereoIpdMm;
+        public static MelonPreferences_Entry<bool> CockpitVrShowOsd;
+        public static MelonPreferences_Entry<bool> LosFlyMode;
+        public static MelonPreferences_Entry<bool> LosAutoTrackCamera;
         public static MelonPreferences_Entry<bool> EnableVtxStatic;
         public static MelonPreferences_Entry<VtxSystem> VtxType;
         public static MelonPreferences_Entry<float> VtxPowerMw;
@@ -436,7 +442,12 @@ namespace FPVDrone
             EnableLensDistortion = category.CreateEntry("EnableLensDistortion", true, "FPV Ultra-Wide Fisheye Lens Barrel Distortion");
             LensDistortionK = category.CreateEntry("LensDistortionK", 0.16f, "Optical Barrel Distortion Factor");
             FpvCameraResolution = category.CreateEntry("FpvCameraResolution", VideoResolution.MatchScreen, "FPV Camera Render Resolution (MatchScreen, 720p, 1080p, 1440p, 4K)");
-            VrView = category.CreateEntry("VrView", VrViewMode.Goggles2D, "VR View Mode (Goggles2D or Stereo3D)");
+            VrView = category.CreateEntry("VrView", VrViewMode.Goggles2D, "VR View Mode (Goggles2D, Stereo3D Goggles, or CockpitVR3D)");
+            VrGoggleScreenFov = category.CreateEntry("VrGoggleScreenFov", 68.0f, "VR Goggle Screen Angular FOV (deg)");
+            VrStereoIpdMm = category.CreateEntry("VrStereoIpdMm", 64.0f, "VR Stereo 3D Camera Eye Separation / IPD (mm)");
+            CockpitVrShowOsd = category.CreateEntry("CockpitVrShowOsd", true, "Show Translucent Betaflight HUD in Full 3D VR View");
+            LosFlyMode = category.CreateEntry("LosFlyMode", false, "Line-of-Sight (LOS) Fly Mode (Desktop & VR)");
+            LosAutoTrackCamera = category.CreateEntry("LosAutoTrackCamera", true, "Desktop LOS Auto-Track Camera");
 
             EnableVtxStatic = category.CreateEntry("EnableVtxStatic", true, "Simulate VTX RF Static and Snow");
             VtxType = category.CreateEntry("VtxType", VtxSystem.Analog, "VTX Video System (Analog or Digital)");
@@ -459,6 +470,9 @@ namespace FPVDrone
             SpoutGimbalPitchOffset = category.CreateEntry("SpoutGimbalPitchOffset", 0.0f, "Horizon-Locked Pitch Offset (deg)");
             SpoutGimbalFov = category.CreateEntry("SpoutGimbalFov", 110.0f, "Spout2 Gimbal Camera Field of View (deg)");
             SpoutGimbalResolution = category.CreateEntry("SpoutGimbalResolution", VideoResolution.Res1080p, "Spout2 Gimbal Camera Render Resolution");
+
+            // Always start disabled on game launch so normal CVR sessions are unaffected until toggled on
+            ModEnabled.Value = false;
         }
 
         public static void GetResolutionDimensions(VideoResolution res, out int width, out int height)

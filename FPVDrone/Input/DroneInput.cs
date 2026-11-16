@@ -1,6 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using ABI_RC.Core.InteractionSystem;
+using ABI_RC.Core.Savior;
 using ABI_RC.Systems.InputManagement;
+using ABI_RC.Systems.InputManagement.InputModules;
+using ABI_RC.Systems.InputManagement.XR;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
@@ -46,6 +51,31 @@ namespace FPVDrone
         private float _smoothedKbPitch = 0.0f;
         private float _smoothedKbRoll = 0.0f;
         private float _smoothedKbYaw = 0.0f;
+
+        // Cached reflection fields for ChilloutVR's unified SteamVR/OpenXR controller modules
+        private static readonly FieldInfo LeftXrModuleField =
+            typeof(CVRInputModule_XR).GetField("_leftModule", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo RightXrModuleField =
+            typeof(CVRInputModule_XR).GetField("_rightModule", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        // VR thumbstick click / chord tracking
+        private bool _prevVrLeftClick;
+        private bool _prevVrRightClick;
+        private bool _vrChordConsumed;
+
+        public static void GetXrModules(out CVRXRModule leftModule, out CVRXRModule rightModule)
+        {
+            leftModule = null;
+            rightModule = null;
+            var xr = CVRInputManager._moduleXR;
+            if (xr == null)
+                return;
+
+            if (LeftXrModuleField != null)
+                leftModule = LeftXrModuleField.GetValue(xr) as CVRXRModule;
+            if (RightXrModuleField != null)
+                rightModule = RightXrModuleField.GetValue(xr) as CVRXRModule;
+        }
 
         public void StartListeningForBind(DroneAction action, bool isRadio)
         {
@@ -155,10 +185,27 @@ namespace FPVDrone
             if (IsRadioButtonPressed(Settings.RadioMenuButton.Value))
                 MenuTogglePressed = true;
 
-            // If config menu or VR QuickMenu is open, block all flight controls
-            bool isQuickMenuOpen = ABI_RC.Core.InteractionSystem.CVR_MenuManager.Instance != null &&
-                                   ABI_RC.Core.InteractionSystem.CVR_MenuManager.Instance.IsViewShown;
-            if (isMenuOpen || isQuickMenuOpen)
+            // Check ChilloutVR menus (QuickMenu + Main ViewManager Menu)
+            bool isQuickMenuOpen = CVR_MenuManager.Instance != null && CVR_MenuManager.Instance.IsViewShown;
+            bool isMainMenuOpen = ViewManager.Instance != null && ViewManager.Instance.IsAnyMenuOpen;
+            bool isCvrMenuOpen = isQuickMenuOpen || isMainMenuOpen;
+
+            // VR controller chords & buttons (L3+R3 arm/disarm, L3 menu when disarmed, R3 turtle flip, A reset, X mode)
+            bool allowVrController = prefDevice == ControllerDevice.VRControllers ||
+                                     (prefDevice == ControllerDevice.Auto && MetaPort.Instance != null && MetaPort.Instance.isUsingVr);
+            if (allowVrController && !isCvrMenuOpen)
+            {
+                UpdateVrButtons(isFlightActive, isMenuOpen);
+            }
+            else
+            {
+                _prevVrLeftClick = false;
+                _prevVrRightClick = false;
+                _vrChordConsumed = false;
+            }
+
+            // If config menu or any ChilloutVR menu is open, block all flight controls
+            if (isMenuOpen || isCvrMenuOpen)
             {
                 Throttle = 0.0f;
                 Pitch = 0.0f;
@@ -226,17 +273,17 @@ namespace FPVDrone
             }
             else if (prefDevice == ControllerDevice.VRControllers)
             {
-                if (isFlightActive && TryReadVR(out rawThrottle, out rawPitch, out rawRoll, out rawYaw, deadzone))
+                if (TryReadVR(out rawThrottle, out rawPitch, out rawRoll, out rawYaw, deadzone))
                 {
                     deviceRead = true;
                     ActiveDeviceName = Settings.GamepadTriggerThrottle.Value ? "VR Controllers (RT Throttle)" : "VR Controllers";
                 }
                 else
                 {
-                    ActiveDeviceName = isFlightActive ? "VR Controllers (Disconnected)" : "VR Controllers (Armed Only)";
+                    ActiveDeviceName = "VR Controllers (Disconnected)";
                 }
             }
-            else // Auto detection: prioritize RC Radio, then Gamepad, then VR (when armed), then Keyboard
+            else // Auto detection: prioritize RC Radio, then Gamepad, then VR (when in VR), then Keyboard
             {
                 if (TryReadRadio(out rawThrottle, out rawPitch, out rawRoll, out rawYaw, deadzone, isFlightActive))
                 {
@@ -248,7 +295,7 @@ namespace FPVDrone
                     deviceRead = true;
                     ActiveDeviceName = GetGamepadDisplayName(gamepad);
                 }
-                else if (isFlightActive && TryReadVR(out rawThrottle, out rawPitch, out rawRoll, out rawYaw, deadzone))
+                else if (allowVrController && TryReadVR(out rawThrottle, out rawPitch, out rawRoll, out rawYaw, deadzone))
                 {
                     deviceRead = true;
                     ActiveDeviceName = Settings.GamepadTriggerThrottle.Value ? "VR Controllers (RT Throttle)" : "VR Controllers";
@@ -352,6 +399,47 @@ namespace FPVDrone
             return true;
         }
 
+        private void UpdateVrButtons(bool isFlightActive, bool isMenuOpen)
+        {
+            GetXrModules(out CVRXRModule leftMod, out CVRXRModule rightMod);
+            bool leftValid = leftMod != null && leftMod.IsValid;
+            bool rightValid = rightMod != null && rightMod.IsValid;
+
+            bool leftClickHeld = leftValid && leftMod.Primary2DAxisDown;
+            bool rightClickHeld = rightValid && rightMod.Primary2DAxisDown;
+
+            // L3 + R3 simultaneous click toggles Arm / Disarm cleanly without firing single-stick actions
+            if (leftClickHeld && rightClickHeld)
+            {
+                if (!_vrChordConsumed && !isMenuOpen)
+                    ArmTogglePressed = true;
+                _vrChordConsumed = true;
+            }
+            else if (!leftClickHeld && !rightClickHeld)
+            {
+                // Fire single L3 / R3 actions on release only if they were not part of an L3+R3 chord
+                if (_prevVrLeftClick && !_vrChordConsumed && !isFlightActive)
+                    MenuTogglePressed = true;
+
+                if (_prevVrRightClick && !_vrChordConsumed && isFlightActive && !isMenuOpen)
+                    TurtleFlipPressed = true;
+
+                _vrChordConsumed = false;
+            }
+
+            _prevVrLeftClick = leftClickHeld;
+            _prevVrRightClick = rightClickHeld;
+
+            if (isFlightActive && !isMenuOpen)
+            {
+                if (rightValid && rightMod.PrimaryButton)
+                    ResetPressed = true;
+
+                if (leftValid && leftMod.PrimaryButton)
+                    FlightModeTogglePressed = true;
+            }
+        }
+
         private bool TryReadVR(
             out float rawThrottle,
             out float rawPitch,
@@ -364,23 +452,15 @@ namespace FPVDrone
             rawRoll = 0.0f;
             rawYaw = 0.0f;
 
-            UnityEngine.XR.InputDevice leftDev = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.LeftHand);
-            UnityEngine.XR.InputDevice rightDev = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand);
-            if (!leftDev.isValid && !rightDev.isValid)
+            GetXrModules(out CVRXRModule leftMod, out CVRXRModule rightMod);
+            bool leftValid = leftMod != null && leftMod.IsValid;
+            bool rightValid = rightMod != null && rightMod.IsValid;
+            if (!leftValid && !rightValid)
                 return false;
 
-            Vector2 leftStick = Vector2.zero;
-            Vector2 rightStick = Vector2.zero;
-            float rightTrigger = 0.0f;
-
-            if (leftDev.isValid)
-                leftDev.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out leftStick);
-
-            if (rightDev.isValid)
-            {
-                rightDev.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out rightStick);
-                rightDev.TryGetFeatureValue(UnityEngine.XR.CommonUsages.trigger, out rightTrigger);
-            }
+            Vector2 leftStick = leftValid ? leftMod.Primary2DAxis : Vector2.zero;
+            Vector2 rightStick = rightValid ? rightMod.Primary2DAxis : Vector2.zero;
+            float rightTrigger = rightValid ? rightMod.Trigger : 0.0f;
 
             ProcessSpringCenteredSticks(
                 leftStick,
@@ -905,7 +985,15 @@ namespace FPVDrone
 
                 if (locked && CVRInputManager.Instance != null)
                 {
-                    CVRInputManager.Instance.movementVector = Vector3.zero;
+                    var im = CVRInputManager.Instance;
+                    im.movementVector = Vector3.zero;
+                    im.lookVector = Vector2.zero;
+                    im.rawLookVector = Vector2.zero;
+                    im.sectionTurn = 0f;
+                    im.floatDirection = 0f;
+                    im.rollDirection = 0f;
+                    im.jump = false;
+                    im.sprint = false;
                 }
             }
             catch (Exception ex)

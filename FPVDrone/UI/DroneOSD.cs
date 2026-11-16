@@ -23,6 +23,9 @@ namespace FPVDrone
         private float _maxG = 1.0f;
         private float _summaryTimer = 0.0f;
         private string _summaryText = "";
+        private float _notifyTimer = 0.0f;
+        private float _notifyDuration = 4.0f;
+        private string _notifyText = "";
 
         public void Initialize()
         {
@@ -82,6 +85,19 @@ namespace FPVDrone
                 _summaryTimer = Mathf.Max(0.0f, _summaryTimer - dt);
         }
 
+        public void ShowNotification(string message, float duration = 4.0f)
+        {
+            _notifyText = message ?? "";
+            _notifyDuration = Mathf.Max(0.5f, duration);
+            _notifyTimer = _notifyDuration;
+        }
+
+        public void TickNotification(float dt)
+        {
+            if (_notifyTimer > 0.0f)
+                _notifyTimer = Mathf.Max(0.0f, _notifyTimer - dt);
+        }
+
         public void DrawPostFlightSummary()
         {
             if (_summaryTimer <= 0.0f || string.IsNullOrEmpty(_summaryText))
@@ -102,7 +118,8 @@ namespace FPVDrone
             bool isArmed,
             float customWidth = -1f,
             float customHeight = -1f,
-            bool skipStatic = false)
+            bool skipStatic = false,
+            bool skipNotification = false)
         {
             EnsureStyles();
 
@@ -196,6 +213,26 @@ namespace FPVDrone
             if (!skipStatic && vtx.StaticIntensity01 > 0.01f)
             {
                 DrawVtxStatic(w, h, vtx.StaticIntensity01, vtx.IsSignalLost);
+            }
+
+            // 8. TRANSIENT REMINDER / NOTIFICATION BANNER (e.g. "L3 + R3 TO DISARM" on VR arm)
+            if (!skipNotification && _notifyTimer > 0.0f && !string.IsNullOrEmpty(_notifyText))
+            {
+                float alpha = Mathf.Clamp01(_notifyTimer < 0.7f ? (_notifyTimer / 0.7f) : 1.0f);
+                float bannerW = Mathf.Min(w - 60f, 680f);
+                float bannerH = 38f;
+                float bx = (w - bannerW) * 0.5f;
+                float by = h * 0.14f;
+
+                GUI.color = new Color(0.03f, 0.05f, 0.04f, 0.78f * alpha);
+                GUI.DrawTexture(new Rect(bx, by, bannerW, bannerH), _pixelTexture);
+
+                GUI.color = new Color(0.35f, 0.95f, 0.55f, 0.9f * alpha);
+                GUI.DrawTexture(new Rect(bx, by, bannerW, 2f), _pixelTexture);
+                GUI.DrawTexture(new Rect(bx, by + bannerH - 2f, bannerW, 2f), _pixelTexture);
+
+                GUI.color = new Color(0.92f, 1.0f, 0.94f, alpha);
+                GUI.Label(new Rect(bx, by + 2f, bannerW, bannerH - 4f), _notifyText, _centerStyle);
             }
 
             GUI.color = Color.white;

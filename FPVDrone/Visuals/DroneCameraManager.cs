@@ -1,3 +1,4 @@
+using ABI_RC.Core;
 using ABI_RC.Core.InteractionSystem;
 using ABI_RC.Core.Player;
 using ABI_RC.Core.Savior;
@@ -7,17 +8,44 @@ namespace FPVDrone
 {
     public class DroneCameraManager
     {
+        private const int VrLeftGoggleLayer = CVRLayers.CVRReserved2;  // Layer 13
+        private const int VrRightGoggleLayer = CVRLayers.CVRReserved3; // Layer 14
+
         private GameObject _cameraRigObject;
         private Camera _fpvCamera;
         private AudioListener _fpvAudioListener;
         private AudioListener _cachedPlayerListener;
         private RenderTexture _fpvRenderTexture;
-        private GameObject _vrGogglesObject;
-        private MeshRenderer _vrGogglesRenderer;
-        private MeshFilter _vrGogglesFilter;
-        private GameObject _vrStereoRigObject;
-        private Camera _vrStereoCamera;
+
+        // Stereo 3D right-eye drone camera (Option 2b)
+        private GameObject _fpvRightRigObject;
+        private Camera _fpvRightCamera;
+        private RenderTexture _fpvRightRenderTexture;
+
+        // Full 3D VR cockpit camera rig (native XR stereo view mounted at drone camera)
+        private GameObject _vrCockpitRigObject;
+        private GameObject _vrCockpitCamObject;
+        private Camera _vrCockpitCamera;
+        private Camera _vrCockpitOsdCam;
+        private GameObject _vrCockpitOsdObject;
+        private bool _vrWorldCamSuppressed = false;
+        private int _savedVrCamCullingMask = 0;
+        private CameraClearFlags _savedVrCamClearFlags = CameraClearFlags.Skybox;
+
+        // VR head-mounted goggle rig (black surround backdrop + left/right eye quads + OSD overlay)
+        private Camera _vrBackdropCamera;
+        private Camera _vrDisplayLeftCam;
+        private Camera _vrDisplayRightCam;
+        private GameObject _vrGogglesLeftObject;
+        private GameObject _vrGogglesRightObject;
+        private GameObject _vrLeftOsdObject;
+        private GameObject _vrRightOsdObject;
+        private MeshFilter _vrGogglesLeftFilter;
+        private MeshFilter _vrGogglesRightFilter;
         private Material _displayMaterial;
+        private Material _rightDisplayMaterial;
+        private Material _osdOverlayMaterial;
+        private RenderTexture _vrOsdRenderTexture;
         private Mesh _distortionMesh;
 
         private float _cachedDistortionK = -999.0f;
@@ -25,6 +53,7 @@ namespace FPVDrone
 
         private bool _isArmed = false;
         private bool _isSpoutActive = false;
+        private bool _isConfigMenuOpen = false;
         private RenderTexture _spoutOsdRenderTexture;
 
         // Dedicated gimbal camera for stabilized clean Spout2 output
@@ -64,6 +93,17 @@ namespace FPVDrone
             };
             _displayMaterial.SetInt("_Cull", 0);
 
+            _rightDisplayMaterial = new Material(unlit)
+            {
+                mainTexture = _fpvRightRenderTexture
+            };
+            _rightDisplayMaterial.SetInt("_Cull", 0);
+
+            Shader transparentShader = Shader.Find("Unlit/Transparent") ?? Shader.Find("Sprites/Default") ?? Shader.Find("UI/Default");
+            _osdOverlayMaterial = new Material(transparentShader);
+            _osdOverlayMaterial.SetInt("_Cull", 0);
+            _osdOverlayMaterial.renderQueue = 3100;
+
             EnsureDistortionMesh();
             Settings.EnableOnboardAudio.OnEntryValueChanged.Subscribe(OnOnboardAudioSettingChanged);
             Settings.FpvCameraResolution.OnEntryValueChanged.Subscribe(OnFpvResolutionChanged);
@@ -71,8 +111,11 @@ namespace FPVDrone
             Settings.SpoutGimbalResolution.OnEntryValueChanged.Subscribe(OnGimbalResolutionChanged);
             Settings.SpoutIncludeOSD.OnEntryValueChanged.Subscribe(OnSpoutOsdSettingChanged);
             Settings.VrView.OnEntryValueChanged.Subscribe(OnVrViewChanged);
+            Settings.CockpitVrShowOsd.OnEntryValueChanged.Subscribe(OnCockpitVrShowOsdChanged);
+            Settings.LosFlyMode.OnEntryValueChanged.Subscribe(OnLosFlyModeChanged);
             Settings.ShowDroneMeshInFpv.OnEntryValueChanged.Subscribe(OnDroneMeshVisibilityChanged);
             Settings.SpoutShowDroneMesh.OnEntryValueChanged.Subscribe(OnDroneMeshVisibilityChanged);
+            Application.onBeforeRender += OnBeforeRenderCockpitVr;
             UpdateCameraCullingMasks();
         }
 
@@ -85,8 +128,10 @@ namespace FPVDrone
             cam.farClipPlane = 1500.0f;
             cam.depth = depth;
             cam.enabled = false;
-            // Exclude UI (5), PlayerClone (9), and UIInternal (15) layers
-            cam.cullingMask = ~((1 << 5) | (1 << 9) | (1 << 15));
+            // Offscreen drone cameras must stay monocular; leaving StereoTargetEyeMask.Both causes XR RT Y-flip
+            cam.stereoTargetEye = StereoTargetEyeMask.None;
+            // Exclude UI (5), PlayerClone (9), VR Goggle layers (13, 14), and UIInternal (15)
+            cam.cullingMask = ~((1 << 5) | (1 << 9) | (1 << VrLeftGoggleLayer) | (1 << VrRightGoggleLayer) | (1 << 15));
             return cam;
         }
 
@@ -127,6 +172,16 @@ namespace FPVDrone
             UpdateCameraActiveState();
         }
 
+        private void OnCockpitVrShowOsdChanged(bool oldValue, bool newValue)
+        {
+            UpdateCameraActiveState();
+        }
+
+        private void OnLosFlyModeChanged(bool oldValue, bool newValue)
+        {
+            UpdateCameraActiveState();
+        }
+
         private void OnDroneMeshVisibilityChanged(bool oldValue, bool newValue)
         {
             UpdateCameraActiveState();
@@ -135,7 +190,7 @@ namespace FPVDrone
 
         private static int GetCullingMaskForDroneMesh(bool showDrone)
         {
-            const int baseMask = ~((1 << 5) | (1 << 9) | (1 << 15) | (1 << DroneMeshRenderer.DroneDiscardLayer));
+            const int baseMask = ~((1 << 5) | (1 << 9) | (1 << VrLeftGoggleLayer) | (1 << VrRightGoggleLayer) | (1 << 15) | (1 << DroneMeshRenderer.DroneDiscardLayer));
             int droneBit = 1 << DroneMeshRenderer.DroneMeshLayer;
             return showDrone ? baseMask : (baseMask & ~droneBit);
         }
@@ -144,7 +199,8 @@ namespace FPVDrone
         {
             int fpvMask = GetCullingMaskForDroneMesh(Settings.ShowDroneMeshInFpv.Value);
             if (_fpvCamera != null) _fpvCamera.cullingMask = fpvMask;
-            if (_vrStereoCamera != null) _vrStereoCamera.cullingMask = fpvMask;
+            if (_fpvRightCamera != null) _fpvRightCamera.cullingMask = fpvMask;
+            if (_vrCockpitCamera != null) _vrCockpitCamera.cullingMask = fpvMask;
             if (_gimbalCamera != null) _gimbalCamera.cullingMask = GetCullingMaskForDroneMesh(Settings.SpoutShowDroneMesh.Value);
         }
 
@@ -166,7 +222,8 @@ namespace FPVDrone
             {
                 name = rtName,
                 antiAliasing = antiAliasing,
-                filterMode = FilterMode.Bilinear
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
             };
             rt.Create();
 
@@ -180,6 +237,13 @@ namespace FPVDrone
 
             if (_displayMaterial != null)
                 _displayMaterial.mainTexture = _fpvRenderTexture;
+
+            if (_fpvRightCamera != null || _fpvRightRenderTexture != null)
+            {
+                EnsureRenderTexture(ref _fpvRightRenderTexture, "FPVDrone_RightRenderTexture", width, height, 2, _fpvRightCamera);
+                if (_rightDisplayMaterial != null)
+                    _rightDisplayMaterial.mainTexture = _fpvRightRenderTexture;
+            }
         }
 
         private bool IsGimbalActive()
@@ -229,10 +293,28 @@ namespace FPVDrone
             UpdateCameraActiveState();
         }
 
+        public void SetConfigMenuOpen(bool open)
+        {
+            if (_isConfigMenuOpen == open)
+                return;
+            _isConfigMenuOpen = open;
+            UpdateCameraActiveState();
+        }
+
         public void SetSpoutActive(bool active)
         {
             _isSpoutActive = active;
             UpdateCameraActiveState();
+        }
+
+        private bool ShouldShowVrGoggles()
+        {
+            if (!_isArmed || _isConfigMenuOpen || Settings.LosFlyMode.Value)
+                return false;
+
+            bool qmOpen = CVR_MenuManager.Instance != null && CVR_MenuManager.Instance.IsViewShown;
+            bool mmOpen = ViewManager.Instance != null && ViewManager.Instance.IsAnyMenuOpen;
+            return !qmOpen && !mmOpen;
         }
 
         private void UpdateCameraActiveState()
@@ -242,11 +324,14 @@ namespace FPVDrone
 
             UpdateGimbalCameraState();
 
-            bool gimbalOnly = _isSpoutActive && !_isArmed && IsGimbalActive();
-            bool shouldRenderFpv = (_isArmed || _isSpoutActive) && !gimbalOnly;
+            bool isVr = MetaPort.Instance != null && MetaPort.Instance.isUsingVr;
+            bool losMode = Settings.LosFlyMode.Value;
+            bool isCockpitVr = isVr && Settings.VrView.Value == VrViewMode.CockpitVR3D;
+            bool needFpvFeed = _isArmed && !losMode && !isCockpitVr;
+            bool gimbalOnly = _isSpoutActive && !needFpvFeed && IsGimbalActive();
+            bool shouldRenderFpv = (needFpvFeed || _isSpoutActive) && !gimbalOnly;
             _fpvCamera.enabled = shouldRenderFpv;
 
-            bool isVr = MetaPort.Instance != null && MetaPort.Instance.isUsingVr;
             if (isVr)
             {
                 UpdateVrDisplayState();
@@ -254,16 +339,9 @@ namespace FPVDrone
             }
             else
             {
-                if (_vrGogglesObject != null)
-                {
-                    _vrGogglesObject.SetActive(false);
-                }
-                if (_vrStereoCamera != null)
-                {
-                    _vrStereoCamera.enabled = false;
-                }
+                DisableVrGogglesRig();
 
-                if (Settings.EnableOnboardAudio.Value && _isArmed)
+                if (!losMode && Settings.EnableOnboardAudio.Value && _isArmed)
                 {
                     UpdateOnboardAudioListener(true);
                 }
@@ -274,29 +352,154 @@ namespace FPVDrone
             }
         }
 
+        private void SetVrWorldCamSuppressed(bool suppress)
+        {
+            var playerSetup = PlayerSetup.Instance;
+            Camera vrCam = playerSetup != null ? playerSetup.vrCam : null;
+
+            if (suppress)
+            {
+                if (vrCam == null)
+                    return;
+
+                if (!_vrWorldCamSuppressed)
+                {
+                    _savedVrCamCullingMask = vrCam.cullingMask & ~((1 << VrLeftGoggleLayer) | (1 << VrRightGoggleLayer));
+                    _savedVrCamClearFlags = vrCam.clearFlags;
+                    _vrWorldCamSuppressed = true;
+                }
+
+                // Keep vrCam enabled so CVR camera/menu code stays intact while zeroing GPU world render cost.
+                vrCam.cullingMask = 0;
+                vrCam.clearFlags = CameraClearFlags.Nothing;
+            }
+            else if (_vrWorldCamSuppressed)
+            {
+                if (vrCam != null)
+                {
+                    vrCam.cullingMask = _savedVrCamCullingMask;
+                    vrCam.clearFlags = _savedVrCamClearFlags;
+                }
+                _vrWorldCamSuppressed = false;
+            }
+        }
+
+        private void DisableVrCockpitRig()
+        {
+            if (_vrCockpitCamera != null) _vrCockpitCamera.enabled = false;
+            if (_vrCockpitOsdCam != null) _vrCockpitOsdCam.enabled = false;
+            if (_vrCockpitOsdObject != null) _vrCockpitOsdObject.SetActive(false);
+            SetVrWorldCamSuppressed(false);
+        }
+
+        private void DisableVrGogglesQuadRig()
+        {
+            if (_vrBackdropCamera != null) _vrBackdropCamera.enabled = false;
+            if (_vrDisplayLeftCam != null) _vrDisplayLeftCam.enabled = false;
+            if (_vrDisplayRightCam != null) _vrDisplayRightCam.enabled = false;
+            if (_vrGogglesLeftObject != null) _vrGogglesLeftObject.SetActive(false);
+            if (_vrGogglesRightObject != null) _vrGogglesRightObject.SetActive(false);
+            if (_fpvRightCamera != null) _fpvRightCamera.enabled = false;
+        }
+
+        private void DisableVrGogglesRig()
+        {
+            DisableVrGogglesQuadRig();
+            DisableVrCockpitRig();
+        }
+
         private void UpdateVrDisplayState()
         {
-            bool qmOpen = CVR_MenuManager.Instance != null && CVR_MenuManager.Instance.IsViewShown;
-            bool showFeed = _isArmed && !qmOpen;
-            bool stereo = Settings.VrView.Value == VrViewMode.Stereo3D;
+            bool showFeed = ShouldShowVrGoggles();
+            VrViewMode viewMode = Settings.VrView.Value;
 
-            if (showFeed && !stereo)
+            if (!showFeed)
             {
-                EnsureVrGogglesDisplay();
-            }
-            if (_vrGogglesObject != null)
-            {
-                _vrGogglesObject.SetActive(showFeed && !stereo);
+                DisableVrGogglesRig();
+                return;
             }
 
-            if (showFeed && stereo)
+            if (viewMode == VrViewMode.CockpitVR3D)
             {
-                EnsureVrStereoCamera();
+                DisableVrGogglesQuadRig();
+                EnsureVrCockpitRig();
+                SetVrWorldCamSuppressed(true);
+
+                var playerSetup = PlayerSetup.Instance;
+                float baseDepth = (playerSetup != null && playerSetup.vrCam != null) ? playerSetup.vrCam.depth : 0.0f;
+                float uiDepth = (playerSetup != null && playerSetup.vrUiCam != null && playerSetup.vrUiCam.depth > baseDepth + 0.05f)
+                    ? playerSetup.vrUiCam.depth
+                    : baseDepth + 2.0f;
+
+                if (playerSetup != null && playerSetup.vrUiCam != null)
+                {
+                    playerSetup.vrUiCam.cullingMask &= ~((1 << VrLeftGoggleLayer) | (1 << VrRightGoggleLayer));
+                }
+
+                if (_vrCockpitCamera != null)
+                {
+                    _vrCockpitCamera.depth = Mathf.Lerp(baseDepth, uiDepth, 0.40f);
+                    _vrCockpitCamera.cullingMask = GetCullingMaskForDroneMesh(Settings.ShowDroneMeshInFpv.Value);
+                    if (playerSetup != null && playerSetup.vrCam != null)
+                    {
+                        _vrCockpitCamera.farClipPlane = playerSetup.vrCam.farClipPlane;
+                    }
+                    _vrCockpitCamera.enabled = true;
+                }
+
+                bool showOsd = Settings.CockpitVrShowOsd.Value;
+                if (_vrCockpitOsdCam != null)
+                {
+                    _vrCockpitOsdCam.depth = Mathf.Lerp(baseDepth, uiDepth, 0.65f);
+                    _vrCockpitOsdCam.cullingMask = 1 << VrLeftGoggleLayer;
+                    _vrCockpitOsdCam.enabled = showOsd;
+                }
+                if (_vrCockpitOsdObject != null)
+                {
+                    _vrCockpitOsdObject.SetActive(showOsd);
+                }
+                return;
             }
-            if (_vrStereoCamera != null)
+
+            DisableVrCockpitRig();
+            bool stereo = viewMode == VrViewMode.Stereo3D;
+
+            EnsureVrGogglesDisplay();
+            if (stereo)
             {
-                _vrStereoCamera.enabled = showFeed && stereo;
+                EnsureVrRightDroneCamera();
             }
+
+            if (_fpvRightCamera != null)
+            {
+                _fpvRightCamera.enabled = stereo;
+            }
+            if (_vrBackdropCamera != null)
+            {
+                _vrBackdropCamera.enabled = true;
+            }
+            if (_vrDisplayLeftCam != null)
+            {
+                _vrDisplayLeftCam.enabled = true;
+                _vrDisplayLeftCam.stereoTargetEye = stereo ? StereoTargetEyeMask.Left : StereoTargetEyeMask.Both;
+                _vrDisplayLeftCam.cullingMask = 1 << VrLeftGoggleLayer;
+            }
+            if (_vrDisplayRightCam != null)
+            {
+                _vrDisplayRightCam.enabled = stereo;
+                _vrDisplayRightCam.stereoTargetEye = StereoTargetEyeMask.Right;
+                _vrDisplayRightCam.cullingMask = 1 << VrRightGoggleLayer;
+            }
+            if (_vrGogglesLeftObject != null)
+            {
+                _vrGogglesLeftObject.SetActive(true);
+            }
+            if (_vrGogglesRightObject != null)
+            {
+                _vrGogglesRightObject.SetActive(stereo);
+            }
+
+            UpdateVrGogglesTransformAndScale();
         }
 
         public RenderTexture GetSpoutTexture(
@@ -354,7 +557,7 @@ namespace FPVDrone
             float scaleY = (float)h / Mathf.Max(1, Screen.height);
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scaleX, scaleY, 1.0f));
 
-            osd.DrawOSD(physics, vtx, input, isArmed, Screen.width, Screen.height, skipStatic: true);
+            osd.DrawOSD(physics, vtx, input, isArmed, Screen.width, Screen.height, skipStatic: true, skipNotification: true);
 
             GUI.matrix = prevMatrix;
             RenderTexture.active = prevActive;
@@ -436,41 +639,43 @@ namespace FPVDrone
             Quaternion uptilt = Quaternion.Euler(-Settings.CameraTiltAngle.Value, 0.0f, 0.0f);
             Quaternion fpvRot = droneRotation * uptilt;
 
+            bool isVr = MetaPort.Instance != null && MetaPort.Instance.isUsingVr;
+            bool stereoVr = isVr && _isArmed && !Settings.LosFlyMode.Value && Settings.VrView.Value == VrViewMode.Stereo3D;
+            float halfIpd = stereoVr ? Mathf.Clamp(Settings.VrStereoIpdMm.Value, 40.0f, 85.0f) * 0.0005f : 0.0f;
+            Vector3 fpvRight = fpvRot * Vector3.right;
+
             if (_cameraRigObject != null && _fpvCamera != null && _fpvCamera.enabled)
             {
                 _fpvCamera.fieldOfView = fov;
                 _fpvCamera.nearClipPlane = nearClip;
-                _cameraRigObject.transform.position = camWorldPos;
+                _cameraRigObject.transform.position = camWorldPos - fpvRight * halfIpd;
                 _cameraRigObject.transform.rotation = fpvRot;
 
                 EnsureDistortionMesh();
-                if (_vrGogglesFilter != null && _vrGogglesFilter.sharedMesh != _distortionMesh)
-                {
-                    _vrGogglesFilter.sharedMesh = _distortionMesh;
-                }
+                if (_vrGogglesLeftFilter != null && _vrGogglesLeftFilter.sharedMesh != _distortionMesh)
+                    _vrGogglesLeftFilter.sharedMesh = _distortionMesh;
+                if (_vrGogglesRightFilter != null && _vrGogglesRightFilter.sharedMesh != _distortionMesh)
+                    _vrGogglesRightFilter.sharedMesh = _distortionMesh;
             }
 
-            if (MetaPort.Instance != null && MetaPort.Instance.isUsingVr)
+            if (isVr)
             {
                 UpdateVrDisplayState();
 
-                if (_vrStereoRigObject != null && _vrStereoCamera != null && _vrStereoCamera.enabled)
+                if (_vrCockpitRigObject != null && _vrCockpitCamera != null && _vrCockpitCamera.enabled)
                 {
-                    _vrStereoCamera.fieldOfView = fov;
-                    _vrStereoCamera.nearClipPlane = nearClip;
-                    var vrCam = PlayerSetup.Instance?.vrCamera;
-                    if (vrCam != null)
-                    {
-                        Transform vrCamT = vrCam.transform;
-                        Quaternion invHeadRot = Quaternion.Inverse(vrCamT.localRotation);
-                        _vrStereoRigObject.transform.rotation = fpvRot * invHeadRot;
-                        _vrStereoRigObject.transform.position = camWorldPos - (_vrStereoRigObject.transform.rotation * vrCamT.localPosition);
-                    }
-                    else
-                    {
-                        _vrStereoRigObject.transform.position = camWorldPos;
-                        _vrStereoRigObject.transform.rotation = fpvRot;
-                    }
+                    _vrCockpitCamera.nearClipPlane = nearClip;
+                    _vrCockpitRigObject.transform.position = camWorldPos;
+                    _vrCockpitRigObject.transform.rotation = fpvRot;
+                    SyncCockpitVrHeadRotation();
+                }
+
+                if (_fpvRightRigObject != null && _fpvRightCamera != null && _fpvRightCamera.enabled)
+                {
+                    _fpvRightCamera.fieldOfView = fov;
+                    _fpvRightCamera.nearClipPlane = nearClip;
+                    _fpvRightRigObject.transform.position = camWorldPos + fpvRight * halfIpd;
+                    _fpvRightRigObject.transform.rotation = fpvRot;
                 }
             }
 
@@ -612,7 +817,7 @@ namespace FPVDrone
 
         private void EnsureVrGogglesDisplay()
         {
-            if (_vrGogglesObject != null)
+            if (_vrGogglesLeftObject != null && _vrBackdropCamera != null && _vrDisplayLeftCam != null)
                 return;
 
             var playerSetup = PlayerSetup.Instance;
@@ -621,48 +826,378 @@ namespace FPVDrone
 
             Transform vrHead = playerSetup.vrCamera.transform;
 
-            _vrGogglesObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            _vrGogglesObject.name = "FPV_VR_Goggles_Display";
-            _vrGogglesObject.transform.SetParent(vrHead, false);
-
-            // Anchor in front of eyes: 0.55m distance, 16:9 aspect ratio (Quad front face already faces -Z toward camera)
-            _vrGogglesObject.transform.localPosition = new Vector3(0.0f, 0.0f, 0.55f);
-            _vrGogglesObject.transform.localRotation = Quaternion.identity;
-            _vrGogglesObject.transform.localScale = new Vector3(0.85f, 0.48f, 1.0f);
-            // UIInternal (15): rendered by vrCamera, excluded from _fpvCamera and world mirrors
-            _vrGogglesObject.layer = 15;
-
-            var collider = _vrGogglesObject.GetComponent<Collider>();
-            if (collider != null)
-                Object.Destroy(collider);
-
-            EnsureDistortionMesh();
-            _vrGogglesFilter = _vrGogglesObject.GetComponent<MeshFilter>();
-            if (_vrGogglesFilter != null)
+            if (playerSetup.vrCam != null)
             {
-                _vrGogglesFilter.sharedMesh = _distortionMesh;
+                playerSetup.vrCam.cullingMask &= ~((1 << VrLeftGoggleLayer) | (1 << VrRightGoggleLayer));
+            }
+            if (playerSetup.vrUiCam != null)
+            {
+                playerSetup.vrUiCam.cullingMask &= ~((1 << VrLeftGoggleLayer) | (1 << VrRightGoggleLayer));
             }
 
-            _vrGogglesRenderer = _vrGogglesObject.GetComponent<MeshRenderer>();
-            _vrGogglesRenderer.material = _displayMaterial;
-            _vrGogglesObject.SetActive(false);
+            if (_vrBackdropCamera == null)
+            {
+                var bgObj = new GameObject("FPV_VR_BackdropCam");
+                bgObj.transform.SetParent(vrHead, false);
+                _vrBackdropCamera = bgObj.AddComponent<Camera>();
+                _vrBackdropCamera.clearFlags = CameraClearFlags.SolidColor;
+                _vrBackdropCamera.backgroundColor = Color.black;
+                _vrBackdropCamera.cullingMask = 0;
+                _vrBackdropCamera.stereoTargetEye = StereoTargetEyeMask.Both;
+                _vrBackdropCamera.depthTextureMode = DepthTextureMode.None;
+                _vrBackdropCamera.nearClipPlane = 0.05f;
+                _vrBackdropCamera.farClipPlane = 2.0f;
+                _vrBackdropCamera.allowHDR = false;
+                _vrBackdropCamera.allowMSAA = false;
+                _vrBackdropCamera.useOcclusionCulling = false;
+                _vrBackdropCamera.enabled = false;
+            }
+
+            if (_vrDisplayLeftCam == null)
+            {
+                var leftCamObj = new GameObject("FPV_VR_DisplayCam_L");
+                leftCamObj.transform.SetParent(vrHead, false);
+                _vrDisplayLeftCam = leftCamObj.AddComponent<Camera>();
+                _vrDisplayLeftCam.clearFlags = CameraClearFlags.Depth;
+                _vrDisplayLeftCam.cullingMask = 1 << VrLeftGoggleLayer;
+                _vrDisplayLeftCam.stereoTargetEye = StereoTargetEyeMask.Both;
+                _vrDisplayLeftCam.depthTextureMode = DepthTextureMode.None;
+                _vrDisplayLeftCam.nearClipPlane = 0.05f;
+                _vrDisplayLeftCam.farClipPlane = 5.0f;
+                _vrDisplayLeftCam.allowHDR = false;
+                _vrDisplayLeftCam.allowMSAA = false;
+                _vrDisplayLeftCam.useOcclusionCulling = false;
+                _vrDisplayLeftCam.enabled = false;
+            }
+
+            if (_vrDisplayRightCam == null)
+            {
+                var rightCamObj = new GameObject("FPV_VR_DisplayCam_R");
+                rightCamObj.transform.SetParent(vrHead, false);
+                _vrDisplayRightCam = rightCamObj.AddComponent<Camera>();
+                _vrDisplayRightCam.clearFlags = CameraClearFlags.Depth;
+                _vrDisplayRightCam.cullingMask = 1 << VrRightGoggleLayer;
+                _vrDisplayRightCam.stereoTargetEye = StereoTargetEyeMask.Right;
+                _vrDisplayRightCam.depthTextureMode = DepthTextureMode.None;
+                _vrDisplayRightCam.nearClipPlane = 0.05f;
+                _vrDisplayRightCam.farClipPlane = 5.0f;
+                _vrDisplayRightCam.allowHDR = false;
+                _vrDisplayRightCam.allowMSAA = false;
+                _vrDisplayRightCam.useOcclusionCulling = false;
+                _vrDisplayRightCam.enabled = false;
+            }
+
+            EnsureDistortionMesh();
+
+            if (_vrGogglesLeftObject == null)
+            {
+                _vrGogglesLeftObject = CreateGoggleQuad(
+                    "FPV_VR_Goggles_Display_L",
+                    vrHead,
+                    VrLeftGoggleLayer,
+                    _displayMaterial,
+                    _distortionMesh,
+                    out _vrGogglesLeftFilter,
+                    out _vrLeftOsdObject);
+            }
+
+            if (_vrGogglesRightObject == null)
+            {
+                _vrGogglesRightObject = CreateGoggleQuad(
+                    "FPV_VR_Goggles_Display_R",
+                    vrHead,
+                    VrRightGoggleLayer,
+                    _rightDisplayMaterial,
+                    _distortionMesh,
+                    out _vrGogglesRightFilter,
+                    out _vrRightOsdObject);
+            }
+
+            UpdateVrGogglesTransformAndScale();
         }
 
-        private void EnsureVrStereoCamera()
+        private GameObject CreateGoggleQuad(
+            string name,
+            Transform parent,
+            int layer,
+            Material videoMat,
+            Mesh mesh,
+            out MeshFilter filter,
+            out GameObject osdOverlayObj)
         {
-            if (_vrStereoCamera != null)
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = name;
+            quad.transform.SetParent(parent, false);
+            quad.layer = layer;
+
+            var col = quad.GetComponent<Collider>();
+            if (col != null)
+                Object.Destroy(col);
+
+            filter = quad.GetComponent<MeshFilter>();
+            if (filter != null && mesh != null)
+                filter.sharedMesh = mesh;
+
+            var mr = quad.GetComponent<MeshRenderer>();
+            if (mr != null)
+            {
+                mr.material = videoMat;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                mr.allowOcclusionWhenDynamic = false;
+            }
+
+            osdOverlayObj = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            osdOverlayObj.name = name + "_OSD";
+            osdOverlayObj.transform.SetParent(quad.transform, false);
+            osdOverlayObj.transform.localPosition = new Vector3(0.0f, 0.0f, -0.002f);
+            osdOverlayObj.transform.localRotation = Quaternion.identity;
+            osdOverlayObj.transform.localScale = Vector3.one;
+            osdOverlayObj.layer = layer;
+
+            var osdCol = osdOverlayObj.GetComponent<Collider>();
+            if (osdCol != null)
+                Object.Destroy(osdCol);
+
+            var osdMr = osdOverlayObj.GetComponent<MeshRenderer>();
+            if (osdMr != null)
+            {
+                osdMr.material = _osdOverlayMaterial;
+                osdMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                osdMr.receiveShadows = false;
+                osdMr.allowOcclusionWhenDynamic = false;
+            }
+
+            quad.SetActive(false);
+            return quad;
+        }
+
+        private void UpdateVrGogglesTransformAndScale()
+        {
+            var playerSetup = PlayerSetup.Instance;
+            if (playerSetup == null || playerSetup.vrCamera == null)
                 return;
 
-            _vrStereoRigObject = new GameObject("FPVDrone_VRStereoRig");
-            Object.DontDestroyOnLoad(_vrStereoRigObject);
+            int goggleMaskExclude = ~((1 << VrLeftGoggleLayer) | (1 << VrRightGoggleLayer));
+            if (playerSetup.vrCam != null)
+                playerSetup.vrCam.cullingMask &= goggleMaskExclude;
+            if (playerSetup.vrUiCam != null)
+                playerSetup.vrUiCam.cullingMask &= goggleMaskExclude;
 
-            var camHost = new GameObject("FPVDrone_VRStereoCam");
-            camHost.transform.SetParent(_vrStereoRigObject.transform, false);
+            float baseDepth = playerSetup.vrCam != null ? playerSetup.vrCam.depth : 0.0f;
+            float uiDepth = (playerSetup.vrUiCam != null && playerSetup.vrUiCam.depth > baseDepth + 0.05f)
+                ? playerSetup.vrUiCam.depth
+                : baseDepth + 2.0f;
 
-            _vrStereoCamera = CreateFpvCameraComponent(camHost, depth: 10);
+            if (_vrBackdropCamera != null)
+                _vrBackdropCamera.depth = Mathf.Lerp(baseDepth, uiDepth, 0.25f);
+            if (_vrDisplayLeftCam != null)
+            {
+                _vrDisplayLeftCam.depth = Mathf.Lerp(baseDepth, uiDepth, 0.50f);
+                if (playerSetup.vrCam != null)
+                    _vrDisplayLeftCam.fieldOfView = playerSetup.vrCam.fieldOfView;
+            }
+            if (_vrDisplayRightCam != null)
+            {
+                _vrDisplayRightCam.depth = Mathf.Lerp(baseDepth, uiDepth, 0.50f);
+                if (playerSetup.vrCam != null)
+                    _vrDisplayRightCam.fieldOfView = playerSetup.vrCam.fieldOfView;
+            }
+
+            // Compensate for CVR avatar height scaling (_avatarScaleRelation) on vrCameraRig
+            float headScale = Mathf.Max(0.05f, playerSetup.vrCamera.transform.lossyScale.y);
+            const float worldDist = 0.80f;
+            float goggleFovDeg = Mathf.Clamp(Settings.VrGoggleScreenFov.Value, 35.0f, 110.0f);
+            float worldWidth = 2.0f * worldDist * Mathf.Tan(goggleFovDeg * 0.5f * Mathf.Deg2Rad);
+            float aspect = (_fpvRenderTexture != null && _fpvRenderTexture.height > 0)
+                ? (float)_fpvRenderTexture.width / _fpvRenderTexture.height
+                : (16.0f / 9.0f);
+            float worldHeight = worldWidth / aspect;
+
+            Vector3 localPos = new Vector3(0.0f, 0.0f, worldDist / headScale);
+            Vector3 localScale = new Vector3(worldWidth / headScale, worldHeight / headScale, 1.0f / headScale);
+
+            if (_vrGogglesLeftObject != null)
+            {
+                _vrGogglesLeftObject.transform.localPosition = localPos;
+                _vrGogglesLeftObject.transform.localRotation = Quaternion.identity;
+                _vrGogglesLeftObject.transform.localScale = localScale;
+            }
+            if (_vrGogglesRightObject != null)
+            {
+                _vrGogglesRightObject.transform.localPosition = localPos;
+                _vrGogglesRightObject.transform.localRotation = Quaternion.identity;
+                _vrGogglesRightObject.transform.localScale = localScale;
+            }
+        }
+
+        private void EnsureVrCockpitRig()
+        {
+            if (_vrCockpitRigObject != null && _vrCockpitCamera != null && _vrCockpitOsdCam != null && _vrCockpitOsdObject != null)
+                return;
+
+            var playerSetup = PlayerSetup.Instance;
+
+            if (_vrCockpitRigObject == null)
+            {
+                _vrCockpitRigObject = new GameObject("FPVDrone_VrCockpitRig");
+                Object.DontDestroyOnLoad(_vrCockpitRigObject);
+            }
+
+            if (_vrCockpitCamObject == null)
+            {
+                _vrCockpitCamObject = new GameObject("FPVDrone_VrCockpitHead");
+                _vrCockpitCamObject.transform.SetParent(_vrCockpitRigObject.transform, false);
+                _vrCockpitCamObject.transform.localPosition = Vector3.zero;
+                _vrCockpitCamObject.transform.localRotation = Quaternion.identity;
+            }
+
+            if (_vrCockpitCamera == null)
+            {
+                _vrCockpitCamera = _vrCockpitCamObject.AddComponent<Camera>();
+                _vrCockpitCamera.clearFlags = CameraClearFlags.Skybox;
+                _vrCockpitCamera.nearClipPlane = 0.02f;
+                _vrCockpitCamera.farClipPlane = (playerSetup != null && playerSetup.vrCam != null) ? playerSetup.vrCam.farClipPlane : 1500.0f;
+                _vrCockpitCamera.stereoTargetEye = StereoTargetEyeMask.Both;
+                _vrCockpitCamera.allowHDR = playerSetup != null && playerSetup.vrCam != null && playerSetup.vrCam.allowHDR;
+                _vrCockpitCamera.allowMSAA = playerSetup == null || playerSetup.vrCam == null || playerSetup.vrCam.allowMSAA;
+                _vrCockpitCamera.cullingMask = GetCullingMaskForDroneMesh(Settings.ShowDroneMeshInFpv.Value);
+                _vrCockpitCamera.enabled = false;
+            }
+
+            if (_vrCockpitOsdCam == null)
+            {
+                var osdCamObj = new GameObject("FPVDrone_VrCockpitOsdCam");
+                osdCamObj.transform.SetParent(_vrCockpitCamObject.transform, false);
+                osdCamObj.transform.localPosition = Vector3.zero;
+                osdCamObj.transform.localRotation = Quaternion.identity;
+
+                _vrCockpitOsdCam = osdCamObj.AddComponent<Camera>();
+                _vrCockpitOsdCam.clearFlags = CameraClearFlags.Depth;
+                _vrCockpitOsdCam.cullingMask = 1 << VrLeftGoggleLayer;
+                _vrCockpitOsdCam.stereoTargetEye = StereoTargetEyeMask.Both;
+                _vrCockpitOsdCam.depthTextureMode = DepthTextureMode.None;
+                _vrCockpitOsdCam.nearClipPlane = 0.05f;
+                _vrCockpitOsdCam.farClipPlane = 5.0f;
+                _vrCockpitOsdCam.allowHDR = false;
+                _vrCockpitOsdCam.allowMSAA = false;
+                _vrCockpitOsdCam.useOcclusionCulling = false;
+                _vrCockpitOsdCam.enabled = false;
+            }
+
+            if (_vrCockpitOsdObject == null)
+            {
+                _vrCockpitOsdObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                _vrCockpitOsdObject.name = "FPVDrone_VrCockpit_OSD";
+                _vrCockpitOsdObject.transform.SetParent(_vrCockpitCamObject.transform, false);
+                _vrCockpitOsdObject.transform.localPosition = new Vector3(0.0f, 0.0f, 1.35f);
+                _vrCockpitOsdObject.transform.localRotation = Quaternion.identity;
+                _vrCockpitOsdObject.transform.localScale = new Vector3(1.60f, 0.90f, 1.0f);
+                _vrCockpitOsdObject.layer = VrLeftGoggleLayer;
+
+                var osdCol = _vrCockpitOsdObject.GetComponent<Collider>();
+                if (osdCol != null)
+                    Object.Destroy(osdCol);
+
+                var osdMr = _vrCockpitOsdObject.GetComponent<MeshRenderer>();
+                if (osdMr != null)
+                {
+                    osdMr.material = _osdOverlayMaterial;
+                    osdMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    osdMr.receiveShadows = false;
+                    osdMr.allowOcclusionWhenDynamic = false;
+                }
+
+                _vrCockpitOsdObject.SetActive(false);
+            }
+        }
+
+        private void SyncCockpitVrHeadRotation()
+        {
+            if (_vrCockpitCamObject == null)
+                return;
+
+            var playerSetup = PlayerSetup.Instance;
+            if (playerSetup == null || playerSetup.vrCamera == null)
+                return;
+
+            _vrCockpitCamObject.transform.localPosition = Vector3.zero;
+            _vrCockpitCamObject.transform.localRotation = playerSetup.vrCamera.transform.localRotation;
+        }
+
+        private void OnBeforeRenderCockpitVr()
+        {
+            if (_vrCockpitCamera == null || !_vrCockpitCamera.enabled)
+                return;
+
+            SyncCockpitVrHeadRotation();
+        }
+
+        private void EnsureVrRightDroneCamera()
+        {
+            if (_fpvRightCamera != null)
+                return;
+
+            _fpvRightRigObject = new GameObject("FPVDrone_RightEyeCameraRig");
+            Object.DontDestroyOnLoad(_fpvRightRigObject);
+
+            _fpvRightCamera = CreateFpvCameraComponent(_fpvRightRigObject, depth: 10);
             UpdateCameraCullingMasks();
-            _vrStereoCamera.targetTexture = null;
-            _vrStereoCamera.stereoTargetEye = StereoTargetEyeMask.Both;
+
+            int rw = _fpvRenderTexture != null ? _fpvRenderTexture.width : 1280;
+            int rh = _fpvRenderTexture != null ? _fpvRenderTexture.height : 720;
+            EnsureRenderTexture(ref _fpvRightRenderTexture, "FPVDrone_RightRenderTexture", rw, rh, 2, _fpvRightCamera);
+
+            if (_rightDisplayMaterial != null)
+                _rightDisplayMaterial.mainTexture = _fpvRightRenderTexture;
+        }
+
+        public void PrepareVrGogglesOsd(DroneOSD osd, DronePhysics physics, DroneVTXSimulation vtx, DroneInput input)
+        {
+            if (osd == null || !ShouldShowVrGoggles())
+                return;
+
+            bool isCockpitVr = Settings.VrView.Value == VrViewMode.CockpitVR3D;
+            if (isCockpitVr && !Settings.CockpitVrShowOsd.Value)
+                return;
+
+            const int osdW = 1280;
+            const int osdH = 720;
+
+            if (_vrOsdRenderTexture == null || _vrOsdRenderTexture.width != osdW || _vrOsdRenderTexture.height != osdH)
+            {
+                if (_vrOsdRenderTexture != null)
+                {
+                    if (_vrOsdRenderTexture.IsCreated()) _vrOsdRenderTexture.Release();
+                    Object.Destroy(_vrOsdRenderTexture);
+                }
+
+                _vrOsdRenderTexture = new RenderTexture(osdW, osdH, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB)
+                {
+                    name = "FPVDrone_VrOsdOverlay",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                _vrOsdRenderTexture.Create();
+            }
+
+            if (_osdOverlayMaterial != null && _osdOverlayMaterial.mainTexture != _vrOsdRenderTexture)
+                _osdOverlayMaterial.mainTexture = _vrOsdRenderTexture;
+
+            RenderTexture prevActive = RenderTexture.active;
+            Matrix4x4 prevMatrix = GUI.matrix;
+            bool prevSrgb = GL.sRGBWrite;
+
+            RenderTexture.active = _vrOsdRenderTexture;
+            GL.Clear(true, true, Color.clear);
+            GL.sRGBWrite = QualitySettings.activeColorSpace == ColorSpace.Linear;
+            GUI.matrix = Matrix4x4.identity;
+
+            osd.DrawOSD(physics, vtx, input, _isArmed, osdW, osdH, skipStatic: isCockpitVr, skipNotification: false);
+
+            GUI.matrix = prevMatrix;
+            GL.sRGBWrite = prevSrgb;
+            RenderTexture.active = prevActive;
         }
 
         private void EnsureDistortionMesh()
@@ -742,25 +1277,38 @@ namespace FPVDrone
 
         public void Destroy()
         {
+            Application.onBeforeRender -= OnBeforeRenderCockpitVr;
             Settings.EnableOnboardAudio.OnEntryValueChanged.Unsubscribe(OnOnboardAudioSettingChanged);
             Settings.FpvCameraResolution.OnEntryValueChanged.Unsubscribe(OnFpvResolutionChanged);
             Settings.SpoutGimbal.OnEntryValueChanged.Unsubscribe(OnGimbalSettingChanged);
             Settings.SpoutGimbalResolution.OnEntryValueChanged.Unsubscribe(OnGimbalResolutionChanged);
             Settings.SpoutIncludeOSD.OnEntryValueChanged.Unsubscribe(OnSpoutOsdSettingChanged);
             Settings.VrView.OnEntryValueChanged.Unsubscribe(OnVrViewChanged);
+            Settings.CockpitVrShowOsd.OnEntryValueChanged.Unsubscribe(OnCockpitVrShowOsdChanged);
+            Settings.LosFlyMode.OnEntryValueChanged.Unsubscribe(OnLosFlyModeChanged);
             Settings.ShowDroneMeshInFpv.OnEntryValueChanged.Unsubscribe(OnDroneMeshVisibilityChanged);
             Settings.SpoutShowDroneMesh.OnEntryValueChanged.Unsubscribe(OnDroneMeshVisibilityChanged);
+            SetVrWorldCamSuppressed(false);
             RestorePlayerAudioListener();
+            if (_vrCockpitRigObject != null)
+            {
+                Object.Destroy(_vrCockpitRigObject);
+                _vrCockpitRigObject = null;
+                _vrCockpitCamObject = null;
+                _vrCockpitCamera = null;
+                _vrCockpitOsdCam = null;
+                _vrCockpitOsdObject = null;
+            }
             if (_cameraRigObject != null)
             {
                 Object.Destroy(_cameraRigObject);
                 _cameraRigObject = null;
             }
-            if (_vrStereoRigObject != null)
+            if (_fpvRightRigObject != null)
             {
-                Object.Destroy(_vrStereoRigObject);
-                _vrStereoRigObject = null;
-                _vrStereoCamera = null;
+                Object.Destroy(_fpvRightRigObject);
+                _fpvRightRigObject = null;
+                _fpvRightCamera = null;
             }
             if (_gimbalRigObject != null)
             {
@@ -768,15 +1316,47 @@ namespace FPVDrone
                 _gimbalRigObject = null;
                 _gimbalCamera = null;
             }
-            if (_vrGogglesObject != null)
+            if (_vrBackdropCamera != null)
             {
-                Object.Destroy(_vrGogglesObject);
-                _vrGogglesObject = null;
+                Object.Destroy(_vrBackdropCamera.gameObject);
+                _vrBackdropCamera = null;
+            }
+            if (_vrDisplayLeftCam != null)
+            {
+                Object.Destroy(_vrDisplayLeftCam.gameObject);
+                _vrDisplayLeftCam = null;
+            }
+            if (_vrDisplayRightCam != null)
+            {
+                Object.Destroy(_vrDisplayRightCam.gameObject);
+                _vrDisplayRightCam = null;
+            }
+            if (_vrGogglesLeftObject != null)
+            {
+                Object.Destroy(_vrGogglesLeftObject);
+                _vrGogglesLeftObject = null;
+                _vrLeftOsdObject = null;
+            }
+            if (_vrGogglesRightObject != null)
+            {
+                Object.Destroy(_vrGogglesRightObject);
+                _vrGogglesRightObject = null;
+                _vrRightOsdObject = null;
             }
             if (_displayMaterial != null)
             {
                 Object.Destroy(_displayMaterial);
                 _displayMaterial = null;
+            }
+            if (_rightDisplayMaterial != null)
+            {
+                Object.Destroy(_rightDisplayMaterial);
+                _rightDisplayMaterial = null;
+            }
+            if (_osdOverlayMaterial != null)
+            {
+                Object.Destroy(_osdOverlayMaterial);
+                _osdOverlayMaterial = null;
             }
             if (_distortionMesh != null)
             {
@@ -789,6 +1369,20 @@ namespace FPVDrone
                     _fpvRenderTexture.Release();
                 Object.Destroy(_fpvRenderTexture);
                 _fpvRenderTexture = null;
+            }
+            if (_fpvRightRenderTexture != null)
+            {
+                if (_fpvRightRenderTexture.IsCreated())
+                    _fpvRightRenderTexture.Release();
+                Object.Destroy(_fpvRightRenderTexture);
+                _fpvRightRenderTexture = null;
+            }
+            if (_vrOsdRenderTexture != null)
+            {
+                if (_vrOsdRenderTexture.IsCreated())
+                    _vrOsdRenderTexture.Release();
+                Object.Destroy(_vrOsdRenderTexture);
+                _vrOsdRenderTexture = null;
             }
             if (_gimbalRenderTexture != null)
             {
